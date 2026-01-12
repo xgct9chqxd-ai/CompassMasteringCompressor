@@ -4,7 +4,6 @@
 #include <juce_dsp/juce_dsp.h>
 #include <array>
 #include <memory>
-#include <atomic>
 
 class CompassMasteringLimiterAudioProcessor final : public juce::AudioProcessor
 {
@@ -43,8 +42,6 @@ public:
     APVTS& getAPVTS() noexcept { return *apvts; }
     const APVTS& getAPVTS() const noexcept { return *apvts; }
 
-    float getCurrentGRDb() const noexcept { return grDbForUI.load(std::memory_order_relaxed); }
-
 private:
     static APVTS::ParameterLayout createParameterLayout();
 
@@ -68,11 +65,8 @@ private:
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> adaptiveBias01Smoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> stereoLink01Smoothed;
 
-    // Deterministic lifecycle context (captured in prepareToPlay/reset):
+    // Deterministic lifecycle context (captured in prepareToPlay):
     double lastSampleRate = 0.0;
-    double lastInvSampleRate = 0.0; // cached 1 / lastSampleRate (SR-derived coeff scalar)
-    double effectiveControlInvDt = 0.0; // 1.0 / nativeSR
-    double effectiveAudioInvDt   = 0.0; // 1.0 / (nativeSR * OSFactor); OSFactor=1.0 for now
     int lastMaxBlock = 0;
     int lastChannels = 0;
 
@@ -82,28 +76,20 @@ private:
 
     // Oversampling (prebuilt instances; selected at transport-safe boundary only)
     static constexpr int kOsCount = 3; // 2x / 4x / 8x
-    std::array<std::unique_ptr<juce::dsp::Oversampling<float>>, kOsCount> oversamplers;
-    juce::dsp::Oversampling<float>* activeOversampler = nullptr;
+    std::array<std::unique_ptr<juce::dsp::Oversampling<double>>, kOsCount> oversamplers;
+    juce::dsp::Oversampling<double>* activeOversampler = nullptr;
     std::array<int, kOsCount> oversamplerLatencySamples { 0, 0, 0 };
     int latchedOsMinIndex = 0; // 0=2x, 1=4x, 2=8x (latched only at boundary)
 
     // Control-domain true peak (linear)
     double truePeakLin = 0.0;
 
-    // UI meter readout (GR in dB, negative: 0..-60). Published once per block (atomic, lock-free).
-    std::atomic<float> grDbForUI { 0.0f };
-
-    // Envelope system (Micro + Macro, coupled)
-    // Micro: critically damped 2nd-order model (no overshoot; ultra-fast capture; no ringing)
-    // Discrete-time implementation: two cascaded one-pole followers (stable for any dt; no stiffness).
-    // Macro: energy accumulation + exponential decay (bounded; monotonic)
-    // Coupling: macro state influences micro recovery behavior (no competing control paths)
-    std::array<double, 2> microStage1DbState { 0.0, 0.0 };
-    std::array<double, 2> microStage2DbState { 0.0, 0.0 };
-    std::array<double, 2> macroEnergyState   { 0.0, 0.0 };
+    // Gate-5: GR gain state (prevents block-boundary discontinuities).
+    // Internal only; no parameter exposure.
+    float grGainState = 1.0f;
 
     // Scratch buffer for oversampled measurement (double precision)
-    juce::AudioBuffer<float> workBufferFloat;
+    juce::AudioBuffer<double> workBufferDouble;
 
     std::unique_ptr<APVTS> apvts;
 

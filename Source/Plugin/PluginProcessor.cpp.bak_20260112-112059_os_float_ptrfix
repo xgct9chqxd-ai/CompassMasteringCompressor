@@ -278,7 +278,7 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
                 const float* src = buffer.getReadPointer (c);
                 float* dst = workBufferFloat.getWritePointer (c);
                 for (int i = 0; i < n; ++i)
-                    dst[i] = src[i];
+                    dst[i] = (double) src[i];
             }
 
             juce::dsp::AudioBlock<float> fullBlock (workBufferFloat);
@@ -295,7 +295,7 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
 
             // Cache oversampled channel pointers (hot path, no allocations)
             constexpr int kOsChCacheMax = 8;
-            std::array<float*, (size_t) kOsChCacheMax> osPtr {};
+            std::array<double*, (size_t) kOsChCacheMax> osPtr {};
             const int osCached = juce::jmin (juce::jmin (numCh, osCh), kOsChCacheMax);
             for (int c = 0; c < osCached; ++c)
                 osPtr[(size_t) c] = osBlock.getChannelPointer ((size_t) c);
@@ -322,7 +322,7 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
                     const int chProc = juce::jmin (2, numCh);
                     for (int c = 0; c < chProc; ++c)
                     {
-                        const double s = (double) (c < osCached ? osPtr[(size_t) c][i] : osBlock.getChannelPointer ((size_t) c)[i]);
+                        const double s = (c < osCached ? osPtr[(size_t) c][i] : osBlock.getChannelPointer ((size_t) c)[i]);
                         const double tpDb = 20.0 * std::log10 (std::abs (s) + kEpsLin);
 
                         // dB "over ceiling" after Drive (control-domain)
@@ -413,7 +413,7 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
             // Copy double -> float output (native-rate)
             for (int c = 0; c < numCh; ++c)
             {
-                const float* src = workBufferFloat.getReadPointer (c);
+                const double* src = workBufferFloat.getReadPointer (c);
                 float* dst = buffer.getWritePointer (c);
                 for (int i = 0; i < n; ++i)
                     dst[i] = (float) src[i];
@@ -727,7 +727,7 @@ void CompassMasteringLimiterAudioProcessor::measureTruePeak (const juce::AudioBu
         const float* src = buffer.getReadPointer (c);
         float* dst = workBufferFloat.getWritePointer (c);
         for (int i = 0; i < n; ++i)
-            dst[i] = src[i];
+            dst[i] = (double) src[i];
     }
 
     juce::dsp::AudioBlock<float> block (workBufferFloat);

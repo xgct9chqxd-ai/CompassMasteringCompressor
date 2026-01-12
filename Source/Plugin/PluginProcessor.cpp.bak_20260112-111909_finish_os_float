@@ -224,8 +224,8 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
         // Fallback to native-rate if scratch buffer is not prepared for this block size / channel count.
         const bool canOsAudio =
             (activeOversampler != nullptr) &&
-            (workBufferFloat.getNumChannels() >= numCh) &&
-            (workBufferFloat.getNumSamples()  >= n);
+            (workBufferDouble.getNumChannels() >= numCh) &&
+            (workBufferDouble.getNumSamples()  >= n);
 
         if (canOsAudio)
         {
@@ -276,12 +276,12 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
             for (int c = 0; c < numCh; ++c)
             {
                 const float* src = buffer.getReadPointer (c);
-                float* dst = workBufferFloat.getWritePointer (c);
+                double* dst = workBufferDouble.getWritePointer (c);
                 for (int i = 0; i < n; ++i)
-                    dst[i] = src[i];
+                    dst[i] = (double) src[i];
             }
 
-            juce::dsp::AudioBlock<float> fullBlock (workBufferFloat);
+            juce::dsp::AudioBlock<double> fullBlock (workBufferDouble);
             auto blockN = fullBlock.getSubBlock (0, (size_t) n);
 
             juce::ScopedNoDenormals innerNoDenormals;
@@ -295,7 +295,7 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
 
             // Cache oversampled channel pointers (hot path, no allocations)
             constexpr int kOsChCacheMax = 8;
-            std::array<float*, (size_t) kOsChCacheMax> osPtr {};
+            std::array<double*, (size_t) kOsChCacheMax> osPtr {};
             const int osCached = juce::jmin (juce::jmin (numCh, osCh), kOsChCacheMax);
             for (int c = 0; c < osCached; ++c)
                 osPtr[(size_t) c] = osBlock.getChannelPointer ((size_t) c);
@@ -322,7 +322,7 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
                     const int chProc = juce::jmin (2, numCh);
                     for (int c = 0; c < chProc; ++c)
                     {
-                        const double s = (double) (c < osCached ? osPtr[(size_t) c][i] : osBlock.getChannelPointer ((size_t) c)[i]);
+                        const double s = (c < osCached ? osPtr[(size_t) c][i] : osBlock.getChannelPointer ((size_t) c)[i]);
                         const double tpDb = 20.0 * std::log10 (std::abs (s) + kEpsLin);
 
                         // dB "over ceiling" after Drive (control-domain)
@@ -407,13 +407,13 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
 
             grDbForUI.store ((float) grDbNegMin, std::memory_order_relaxed);
 
-            // Downsample back into blockN (workBufferFloat, native-rate length n)
+            // Downsample back into blockN (workBufferDouble, native-rate length n)
             activeOversampler->processSamplesDown (blockN);
 
             // Copy double -> float output (native-rate)
             for (int c = 0; c < numCh; ++c)
             {
-                const float* src = workBufferFloat.getReadPointer (c);
+                const double* src = workBufferDouble.getReadPointer (c);
                 float* dst = buffer.getWritePointer (c);
                 for (int i = 0; i < n; ++i)
                     dst[i] = (float) src[i];
@@ -613,10 +613,10 @@ void CompassMasteringLimiterAudioProcessor::prepareOversampling (int channels, i
     for (int i = 0; i < kOsCount; ++i)
     {
         const int stages = i + 1; // 1->2x, 2->4x, 3->8x
-        oversamplers[(size_t) i] = std::make_unique<juce::dsp::Oversampling<float>>(
+        oversamplers[(size_t) i] = std::make_unique<juce::dsp::Oversampling<double>>(
             ch,
             stages,
-            juce::dsp::Oversampling<float>::filterHalfBandFIREquiripple,
+            juce::dsp::Oversampling<double>::filterHalfBandFIREquiripple,
             true
         );
 
@@ -627,7 +627,7 @@ void CompassMasteringLimiterAudioProcessor::prepareOversampling (int channels, i
     }
 
     // Scratch buffer for input conversion (double precision).
-    workBufferFloat.setSize (ch, mb, false, false, true);
+    workBufferDouble.setSize (ch, mb, false, false, true);
 
     // Default active oversampler is 2x until boundary latch selects otherwise.
     activeOversampler = oversamplers[0].get();
@@ -658,8 +658,8 @@ void CompassMasteringLimiterAudioProcessor::measureTruePeak (const juce::AudioBu
     if (activeOversampler == nullptr)
         return;
 
-    const int ch = juce::jmin (workBufferFloat.getNumChannels(), buffer.getNumChannels());
-    const int n  = juce::jmin (workBufferFloat.getNumSamples(),  buffer.getNumSamples());
+    const int ch = juce::jmin (workBufferDouble.getNumChannels(), buffer.getNumChannels());
+    const int n  = juce::jmin (workBufferDouble.getNumSamples(),  buffer.getNumSamples());
     if (ch <= 0 || n <= 0)
         return;
 
@@ -725,12 +725,12 @@ void CompassMasteringLimiterAudioProcessor::measureTruePeak (const juce::AudioBu
     for (int c = 0; c < ch; ++c)
     {
         const float* src = buffer.getReadPointer (c);
-        float* dst = workBufferFloat.getWritePointer (c);
+        double* dst = workBufferDouble.getWritePointer (c);
         for (int i = 0; i < n; ++i)
-            dst[i] = src[i];
+            dst[i] = (double) src[i];
     }
 
-    juce::dsp::AudioBlock<float> block (workBufferFloat);
+    juce::dsp::AudioBlock<double> block (workBufferDouble);
 
     juce::ScopedNoDenormals innerNoDenormals; // extra guard for oversampler internals
     auto osBlock = activeOversampler->processSamplesUp (block);
