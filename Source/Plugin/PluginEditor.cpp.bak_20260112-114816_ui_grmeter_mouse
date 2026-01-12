@@ -4,15 +4,6 @@ static void setRotary (juce::Slider& s)
 {
     s.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
     s.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 88, 20);
-
-    // Force visibility on dark UI (neutral, high-contrast; no "good/bad" color semantics)
-    s.setColour (juce::Slider::rotarySliderOutlineColourId, juce::Colours::white.withAlpha (0.35f));
-    s.setColour (juce::Slider::rotarySliderFillColourId,    juce::Colours::white.withAlpha (0.85f));
-    s.setColour (juce::Slider::thumbColourId,               juce::Colours::white.withAlpha (0.90f));
-
-    s.setColour (juce::Slider::textBoxTextColourId,         juce::Colours::white.withAlpha (0.90f));
-    s.setColour (juce::Slider::textBoxOutlineColourId,      juce::Colours::white.withAlpha (0.25f));
-    s.setColour (juce::Slider::textBoxBackgroundColourId,   juce::Colours::transparentBlack);
 }
 
 CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcessorEditor (CompassMasteringLimiterAudioProcessor& p)
@@ -26,6 +17,7 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
 
     setRotary (ceiling);
     addAndMakeVisible (ceiling);
+
     adaptiveBias.setSliderStyle (juce::Slider::LinearHorizontal);
     adaptiveBias.setTextBoxStyle (juce::Slider::TextBoxRight, false, 90, 20);
     addAndMakeVisible (adaptiveBias);
@@ -40,8 +32,6 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
     addAndMakeVisible (oversamplingMin);
 
     addAndMakeVisible (grMeter);
-    grMeter.setInterceptsMouseClicks (false, false);
-    grMeter.toBack();
 
     auto& vts = processor.getAPVTS();
 
@@ -64,26 +54,9 @@ void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colours::black);
 
-    // Title
     g.setColour (juce::Colours::white.withAlpha (0.85f));
     g.setFont (14.0f);
     g.drawText ("Compass Mastering Limiter", 16, 10, getWidth() - 32, 20, juce::Justification::left);
-
-    // Static labels (constitution: labeling for all visible controls)
-    auto drawLabelAbove = [&] (const juce::Component& c, const juce::String& label)
-    {
-        auto r = c.getBounds().translated (0, -18);
-        r.setHeight (16);
-        g.setColour (juce::Colours::white.withAlpha (0.70f));
-        g.setFont (12.5f);
-        g.drawText (label, r, juce::Justification::centred, false);
-    };
-
-    drawLabelAbove (drive,           "Drive");
-    drawLabelAbove (ceiling,         "Ceiling");
-    drawLabelAbove (adaptiveBias,    "Adaptive Bias");
-    drawLabelAbove (stereoLink,      "Stereo Link");
-    drawLabelAbove (oversamplingMin, "Oversampling Min");
 }
 
 void CompassMasteringLimiterAudioProcessorEditor::resized()

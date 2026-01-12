@@ -87,7 +87,7 @@ private:
     juce::Slider drive;
     juce::Slider ceiling;
     juce::Slider adaptiveBias;
-    juce::Slider stereoLink;
+juce::Slider stereoLink;
     juce::ComboBox oversamplingMin;
 
     GRHistoryMeter grMeter;
@@ -96,7 +96,7 @@ private:
     std::unique_ptr<APVTS::SliderAttachment> driveA;
     std::unique_ptr<APVTS::SliderAttachment> ceilingA;
     std::unique_ptr<APVTS::SliderAttachment> biasA;
-    std::unique_ptr<APVTS::SliderAttachment> linkA;
+std::unique_ptr<APVTS::SliderAttachment> linkA;
     std::unique_ptr<APVTS::ComboBoxAttachment> osA;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompassMasteringLimiterAudioProcessorEditor)

@@ -102,12 +102,6 @@ private:
     std::array<double, 2> microStage2DbState { 0.0, 0.0 };
     std::array<double, 2> macroEnergyState   { 0.0, 0.0 };
 
-    // Gate: Adaptive Release inputs (deterministic, bounded, continuous)
-    // - Crest factor proxy: short RMS energy accumulator (per-channel)
-    // - Event density: continuous "event presence" accumulator (per-channel)
-    std::array<double, 2> crestRmsSqState    { 0.0, 0.0 };
-    std::array<double, 2> eventDensityState  { 0.0, 0.0 };
-
     // Scratch buffer for oversampled measurement (double precision)
     juce::AudioBuffer<float> workBufferFloat;
 

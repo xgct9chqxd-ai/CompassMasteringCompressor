@@ -118,8 +118,6 @@ void CompassMasteringLimiterAudioProcessor::reset (double sampleRate, int maxBlo
     microStage1DbState = { 0.0, 0.0 };
     microStage2DbState = { 0.0, 0.0 };
     macroEnergyState   = { 0.0, 0.0 };
-    crestRmsSqState    = { 0.0, 0.0 };
-    eventDensityState  = { 0.0, 0.0 };
 }
 
 void CompassMasteringLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -309,8 +307,8 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
             {
                 const double driveDb   = (double) driveDbSmoothed.getNextValue();
                 const double ceilingDb = (double) ceilingDbSmoothed.getNextValue();
-                const double bias01    = juce::jlimit (0.0, 1.0, (double) adaptiveBias01Smoothed.getNextValue());
-                const double link01    = juce::jlimit (0.0, 1.0, (double) stereoLink01Smoothed.getNextValue());
+                const double bias01    = (double) adaptiveBias01Smoothed.getNextValue();
+                const double link01    = (double) stereoLink01Smoothed.getNextValue();
 
                 for (int k = 0; k < osFactor; ++k)
                 {
@@ -348,44 +346,8 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
                         // Bound macro to avoid unbounded growth; mapping to [0,1) via energy/(1+energy)
                         const double macro01 = macroEnergyState[(size_t) c] / (1.0 + macroEnergyState[(size_t) c]);
 
-                        // Adaptive Release inputs (continuous, bounded, deterministic)
-                        // Sustained energy: macro01 (already bounded)
-                        const double sustained01 = juce::jlimit (0.0, 1.0, macro01);
-
-                        // Crest factor proxy: short RMS accumulator of |s| (bounded mapping to [0,1])
-                        constexpr double kCrestRmsSecBase = 0.050; // 50 ms nominal
-                        const double crestRmsSec = kCrestRmsSecBase * (1.15 - 0.30 * bias01); // continuous responsiveness
-                        const double aCR = std::exp (-(dtOS) / juce::jmax (1.0e-6, crestRmsSec));
-                        const double absS = std::abs (s);
-                        crestRmsSqState[(size_t) c] = aCR * crestRmsSqState[(size_t) c] + (1.0 - aCR) * (absS * absS);
-                        const double rmsLin = std::sqrt (juce::jmax (0.0, crestRmsSqState[(size_t) c]));
-                        const double crest = absS / (rmsLin + 1.0e-12);
-                        const double crest01 = juce::jlimit (0.0, 1.0, (crest - 1.0) / (crest + 1.0)); // 0..1
-
-                        // Event density: continuous event presence (no switches), derived from attenuation demand
-                        constexpr double kDensitySecBase = 0.090; // 90 ms nominal
-                        const double densitySec = kDensitySecBase * (1.20 - 0.40 * bias01); // bias affects responsiveness
-                        const double aD = std::exp (-(dtOS) / juce::jmax (1.0e-6, densitySec));
-                        const double densityInput = 1.0 - std::exp (-0.18 * attnTargetDb); // 0..~1 continuous
-                        eventDensityState[(size_t) c] = aD * eventDensityState[(size_t) c] + (1.0 - aD) * densityInput;
-                        const double density01 = juce::jlimit (0.0, 1.0, eventDensityState[(size_t) c]);
-
-                        // Adaptive release curve (continuous, bounded, deterministic)
-                        // - Only depends on: crest01, density01, sustained01 (plus bias scalar for weighting)
-                        constexpr double kMicroSecMin = 0.0030; // 3 ms
-                        constexpr double kMicroSecMax = 0.0600; // 60 ms
-
-                        const double hold01 = juce::jlimit (0.0, 1.0,
-                            (0.60 + 0.20 * (1.0 - bias01)) * sustained01 +
-                            (0.40 - 0.20 * (1.0 - bias01)) * density01);
-
-                        const double snap01 = crest01;
-
-                        const double resp01 = juce::jlimit (0.0, 1.0,
-                            (0.45 + 0.35 * bias01) * snap01 +
-                            (0.55 - 0.35 * bias01) * (1.0 - hold01));
-
-                        const double microSec = kMicroSecMin + (kMicroSecMax - kMicroSecMin) * (1.0 - resp01);
+                        // Micro time scaling: faster under higher macro load and higher bias (more responsive)
+                        const double microSec = kMicroSecBase / (1.0 + kCouple * macro01 * (0.50 + 0.50 * bias01));
 
                         // Critically damped 2nd-order follower (stable discrete-time):
                         // Two cascaded one-pole followers with identical coefficient (no overshoot; no stiffness).
@@ -483,8 +445,8 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
             {
                 const double driveDb   = (double) driveDbSmoothed.getNextValue();
                 const double ceilingDb = (double) ceilingDbSmoothed.getNextValue();
-                const double bias01    = juce::jlimit (0.0, 1.0, (double) adaptiveBias01Smoothed.getNextValue());
-                const double link01    = juce::jlimit (0.0, 1.0, (double) stereoLink01Smoothed.getNextValue());
+                const double bias01    = (double) adaptiveBias01Smoothed.getNextValue();
+                const double link01    = (double) stereoLink01Smoothed.getNextValue();
 
                 // Per-channel: compute attenuation target, then advance micro+macro.
                 std::array<double, 2> attnDbCh { 0.0, 0.0 };
@@ -516,44 +478,8 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
                     // Bound macro to avoid unbounded growth; mapping to [0,1) via energy/(1+energy)
                     const double macro01 = macroEnergyState[(size_t) c] / (1.0 + macroEnergyState[(size_t) c]);
 
-                    // Adaptive Release inputs (continuous, bounded, deterministic)
-                    // Sustained energy: macro01 (already bounded)
-                    const double sustained01 = juce::jlimit (0.0, 1.0, macro01);
-
-                    // Crest factor proxy: short RMS accumulator of |s| (bounded mapping to [0,1])
-                    constexpr double kCrestRmsSecBase = 0.050; // 50 ms nominal
-                    const double crestRmsSec = kCrestRmsSecBase * (1.15 - 0.30 * bias01); // continuous responsiveness
-                    const double aCR = std::exp (-(lastInvSampleRate) / juce::jmax (1.0e-6, crestRmsSec));
-                    const double absS = std::abs ((double) s);
-                    crestRmsSqState[(size_t) c] = aCR * crestRmsSqState[(size_t) c] + (1.0 - aCR) * (absS * absS);
-                    const double rmsLin = std::sqrt (juce::jmax (0.0, crestRmsSqState[(size_t) c]));
-                    const double crest = absS / (rmsLin + 1.0e-12);
-                    const double crest01 = juce::jlimit (0.0, 1.0, (crest - 1.0) / (crest + 1.0)); // 0..1
-
-                    // Event density: continuous event presence (no switches), derived from attenuation demand
-                    constexpr double kDensitySecBase = 0.090; // 90 ms nominal
-                    const double densitySec = kDensitySecBase * (1.20 - 0.40 * bias01); // bias affects responsiveness
-                    const double aD = std::exp (-(lastInvSampleRate) / juce::jmax (1.0e-6, densitySec));
-                    const double densityInput = 1.0 - std::exp (-0.18 * attnTargetDb); // 0..~1 continuous
-                    eventDensityState[(size_t) c] = aD * eventDensityState[(size_t) c] + (1.0 - aD) * densityInput;
-                    const double density01 = juce::jlimit (0.0, 1.0, eventDensityState[(size_t) c]);
-
-                    // Adaptive release curve (continuous, bounded, deterministic)
-                    // - Only depends on: crest01, density01, sustained01 (plus bias scalar for weighting)
-                    constexpr double kMicroSecMin = 0.0030; // 3 ms
-                    constexpr double kMicroSecMax = 0.0600; // 60 ms
-
-                    const double hold01 = juce::jlimit (0.0, 1.0,
-                        (0.60 + 0.20 * (1.0 - bias01)) * sustained01 +
-                        (0.40 - 0.20 * (1.0 - bias01)) * density01);
-
-                    const double snap01 = crest01;
-
-                    const double resp01 = juce::jlimit (0.0, 1.0,
-                        (0.45 + 0.35 * bias01) * snap01 +
-                        (0.55 - 0.35 * bias01) * (1.0 - hold01));
-
-                    const double microSec = kMicroSecMin + (kMicroSecMax - kMicroSecMin) * (1.0 - resp01);
+                    // Micro time scaling: faster under higher macro load and higher bias (more responsive)
+                    const double microSec = kMicroSecBase / (1.0 + kCouple * macro01 * (0.50 + 0.50 * bias01));
 
                     // Critically damped 2nd-order follower (stable discrete-time):
                     // Two cascaded one-pole followers with identical coefficient (no overshoot; no stiffness).
