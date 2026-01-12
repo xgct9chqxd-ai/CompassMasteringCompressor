@@ -1,0 +1,49 @@
+#include "PluginProcessor.h"
+#include "PluginEditor.h"
+
+CompassMasteringLimiterAudioProcessor::CompassMasteringLimiterAudioProcessor()
+: juce::AudioProcessor (BusesProperties()
+#if ! JucePlugin_IsMidiEffect
+ #if ! JucePlugin_IsSynth
+    .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
+ #endif
+    .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
+#endif
+)
+{
+}
+
+void CompassMasteringLimiterAudioProcessor::prepareToPlay (double, int)
+{
+}
+
+void CompassMasteringLimiterAudioProcessor::releaseResources()
+{
+}
+
+bool CompassMasteringLimiterAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
+{
+    const auto& in  = layouts.getMainInputChannelSet();
+    const auto& out = layouts.getMainOutputChannelSet();
+    return (in == out) && (! out.isDisabled());
+}
+
+void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
+{
+    juce::ignoreUnused (midi);
+    juce::ScopedNoDenormals noDenormals;
+
+    // Skeleton behavior: pass-through. Clear any output channels with no input.
+    for (int ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
+        buffer.clear (ch, 0, buffer.getNumSamples());
+}
+
+juce::AudioProcessorEditor* CompassMasteringLimiterAudioProcessor::createEditor()
+{
+    return new CompassMasteringLimiterAudioProcessorEditor (*this);
+}
+
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
+{
+    return new CompassMasteringLimiterAudioProcessor();
+}

@@ -1,0 +1,15 @@
+
+# Build outputs / JUCE artefacts
+build/
+**/build/
+*_artefacts/
+**/*_artefacts/
+build_phase0/
+**/build_phase0/
+
+build/
+**/build/
+*_artefacts/
+**/*_artefacts/
+build_phase0/
+**/build_phase0/

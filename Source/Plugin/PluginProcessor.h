@@ -1,0 +1,97 @@
+#pragma once
+#include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_audio_basics/juce_audio_basics.h>
+#include <juce_dsp/juce_dsp.h>
+#include <array>
+#include <memory>
+
+class CompassMasteringLimiterAudioProcessor final : public juce::AudioProcessor
+{
+public:
+    using APVTS = juce::AudioProcessorValueTreeState;
+
+    CompassMasteringLimiterAudioProcessor();
+    ~CompassMasteringLimiterAudioProcessor() override = default;
+
+    void prepareToPlay (double sampleRate, int samplesPerBlock) override;
+    void releaseResources() override;
+
+    bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
+
+    void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    void processBlockBypassed (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+
+    juce::AudioProcessorEditor* createEditor() override;
+    bool hasEditor() const override { return true; }
+
+    const juce::String getName() const override { return "Compass Mastering Limiter"; }
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+    bool isMidiEffect() const override { return false; }
+    double getTailLengthSeconds() const override { return 0.0; }
+
+    int getNumPrograms() override { return 1; }
+    int getCurrentProgram() override { return 0; }
+    void setCurrentProgram (int) override {}
+    const juce::String getProgramName (int) override { return {}; }
+    void changeProgramName (int, const juce::String&) override {}
+
+    void getStateInformation (juce::MemoryBlock&) override;
+    void setStateInformation (const void*, int) override;
+
+    APVTS& getAPVTS() noexcept { return *apvts; }
+    const APVTS& getAPVTS() const noexcept { return *apvts; }
+
+private:
+    static APVTS::ParameterLayout createParameterLayout();
+
+    // Gate-3 deterministic state model:
+    void reset (double sampleRate, int maxBlock, int channels) noexcept;
+
+    // Oversampling + True Peak (Gate-4):
+    // - FIR polyphase only (linear-phase reconstruction)
+    // - Oversampling is prebuilt in prepareToPlay (no allocations in audio thread)
+    // - Active oversampling selection changes only on transport stop/start edge
+    void prepareOversampling (int channels, int maxBlock);
+    void selectOversamplingAtBoundary (int osMinIndex) noexcept;
+    void measureTruePeak (const juce::AudioBuffer<float>& buffer) noexcept;
+
+    // Gate-2 smoothing policy (declared now; configured in prepareToPlay/reset):
+    // - Drive/Ceiling: sample-accurate linear ramps (SmoothedValue)
+    // - Stereo Link / Adaptive Bias: smoothed (SmoothedValue)
+    // - Oversampling Min: discrete choice (no smoothing)
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> driveDbSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> ceilingDbSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> adaptiveBias01Smoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> stereoLink01Smoothed;
+
+    // Deterministic lifecycle context (captured in prepareToPlay):
+    double lastSampleRate = 0.0;
+    int lastMaxBlock = 0;
+    int lastChannels = 0;
+
+    // Transport edge detection (stop/start triggers reset semantics):
+    bool transportKnown = false;
+    bool lastTransportPlaying = false;
+
+    // Oversampling (prebuilt instances; selected at transport-safe boundary only)
+    static constexpr int kOsCount = 3; // 2x / 4x / 8x
+    std::array<std::unique_ptr<juce::dsp::Oversampling<double>>, kOsCount> oversamplers;
+    juce::dsp::Oversampling<double>* activeOversampler = nullptr;
+    std::array<int, kOsCount> oversamplerLatencySamples { 0, 0, 0 };
+    int latchedOsMinIndex = 0; // 0=2x, 1=4x, 2=8x (latched only at boundary)
+
+    // Control-domain true peak (linear)
+    double truePeakLin = 0.0;
+
+    // Gate-5: GR gain state (prevents block-boundary discontinuities).
+    // Internal only; no parameter exposure.
+    float grGainState = 1.0f;
+
+    // Scratch buffer for oversampled measurement (double precision)
+    juce::AudioBuffer<double> workBufferDouble;
+
+    std::unique_ptr<APVTS> apvts;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompassMasteringLimiterAudioProcessor)
+};

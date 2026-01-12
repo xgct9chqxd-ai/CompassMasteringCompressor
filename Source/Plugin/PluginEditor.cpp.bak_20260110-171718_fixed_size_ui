@@ -1,0 +1,26 @@
+#include "PluginEditor.h"
+
+CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcessorEditor (CompassMasteringLimiterAudioProcessor& p)
+: juce::AudioProcessorEditor (&p), processor (p)
+{
+    setResizable (true, true);
+    setResizeLimits (320, 200, 1200, 900);
+    setSize (420, 240);
+}
+
+void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
+{
+    g.fillAll (juce::Colours::black);
+
+    g.setColour (juce::Colours::white.withAlpha (0.8f));
+    g.setFont (18.0f);
+
+    g.drawFittedText ("Compass Mastering Limiter — Skeleton",
+                      getLocalBounds().reduced (20),
+                      juce::Justification::centred,
+                      1);
+}
+
+void CompassMasteringLimiterAudioProcessorEditor::resized()
+{
+}
