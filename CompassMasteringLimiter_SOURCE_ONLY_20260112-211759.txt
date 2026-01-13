@@ -1,3 +1,243 @@
+SOURCE CODE DUMP ONLY
+ROOT: /Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter
+GENERATED: 20260112-211759
+FILES: 4
+================================================================================
+
+================================================================================
+FILE: Source/Plugin/PluginEditor.cpp
+================================================================================
+#include "PluginEditor.h"
+
+static void setRotary (juce::Slider& s)
+{
+    s.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+    s.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 88, 20);
+
+    // Force visibility on dark UI (neutral, high-contrast; no "good/bad" color semantics)
+    s.setColour (juce::Slider::rotarySliderOutlineColourId, juce::Colours::white.withAlpha (0.35f));
+    s.setColour (juce::Slider::rotarySliderFillColourId,    juce::Colours::white.withAlpha (0.85f));
+    s.setColour (juce::Slider::thumbColourId,               juce::Colours::white.withAlpha (0.90f));
+
+    s.setColour (juce::Slider::textBoxTextColourId,         juce::Colours::white.withAlpha (0.90f));
+    s.setColour (juce::Slider::textBoxOutlineColourId,      juce::Colours::white.withAlpha (0.25f));
+    s.setColour (juce::Slider::textBoxBackgroundColourId,   juce::Colours::transparentBlack);
+}
+
+CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcessorEditor (CompassMasteringLimiterAudioProcessor& p)
+: juce::AudioProcessorEditor (&p), processor (p)
+{
+    setResizable (false, false);
+    setSize (820, 260);
+
+    setRotary (drive);
+    addAndMakeVisible (drive);
+
+    setRotary (ceiling);
+    addAndMakeVisible (ceiling);
+    adaptiveBias.addItem ("Transparent", 1);
+    adaptiveBias.addItem ("Balanced", 2);
+    adaptiveBias.addItem ("Aggressive", 3);
+    addAndMakeVisible (adaptiveBias);
+
+    stereoLink.setSliderStyle (juce::Slider::LinearHorizontal);
+    stereoLink.setTextBoxStyle (juce::Slider::TextBoxRight, false, 90, 20);
+    addAndMakeVisible (stereoLink);
+
+    oversamplingMin.addItem ("2x", 1);
+    oversamplingMin.addItem ("4x", 2);
+    oversamplingMin.addItem ("8x", 3);
+    addAndMakeVisible (oversamplingMin);
+
+    addAndMakeVisible (grMeter);
+    grMeter.setInterceptsMouseClicks (false, false);
+    grMeter.toBack();
+
+    currentGrLabel.setJustificationType (juce::Justification::centredRight);
+    currentGrLabel.setFont (juce::Font (14.0f));
+    currentGrLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    currentGrLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    currentGrLabel.setInterceptsMouseClicks (false, false);
+    currentGrLabel.setText ("0.0 dB", juce::dontSendNotification);
+    addAndMakeVisible (currentGrLabel);
+
+    auto& vts = processor.getAPVTS();
+
+    driveA   = std::make_unique<APVTS::SliderAttachment> (vts, "drive", drive);
+    ceilingA = std::make_unique<APVTS::SliderAttachment> (vts, "ceiling", ceiling);
+    biasA    = std::make_unique<APVTS::ComboBoxAttachment> (vts, "adaptive_bias", adaptiveBias);
+    linkA    = std::make_unique<APVTS::SliderAttachment> (vts, "stereo_link", stereoLink);
+    osA      = std::make_unique<APVTS::ComboBoxAttachment> (vts, "oversampling_min", oversamplingMin);
+
+    startTimerHz (30);
+}
+
+void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
+{
+    const float current = processor.getCurrentGRDb();
+
+    grMeter.pushValueDb (current);
+    currentGrLabel.setText (juce::String::formatted ("%.1f dB", current), juce::dontSendNotification);
+
+    grMeter.repaint();
+}
+
+void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
+{
+    g.fillAll (juce::Colours::black);
+
+    // Title
+    g.setColour (juce::Colours::white.withAlpha (0.85f));
+    g.setFont (14.0f);
+    g.drawText ("Compass Mastering Limiter", 16, 10, getWidth() - 32, 20, juce::Justification::left);
+
+    // Static labels (constitution: labeling for all visible controls)
+    auto drawLabelAbove = [&] (const juce::Component& c, const juce::String& label)
+    {
+        auto r = c.getBounds().translated (0, -18);
+        r.setHeight (16);
+        g.setColour (juce::Colours::white.withAlpha (0.70f));
+        g.setFont (12.5f);
+        g.drawText (label, r, juce::Justification::centred, false);
+    };
+
+    drawLabelAbove (drive,           "Drive");
+    drawLabelAbove (ceiling,         "Ceiling");
+    drawLabelAbove (adaptiveBias,    "Adaptive Bias");
+    drawLabelAbove (stereoLink,      "Stereo Link");
+    drawLabelAbove (oversamplingMin, "Oversampling Min");
+}
+
+void CompassMasteringLimiterAudioProcessorEditor::resized()
+{
+    auto b = getLocalBounds().reduced (16);
+    b.removeFromTop (30);
+
+    const int knob = 104;
+    const int gap  = 16;
+
+    auto row = b.removeFromTop (knob + 30);
+
+    drive.setBounds (row.removeFromLeft (knob));
+    row.removeFromLeft (gap);
+    ceiling.setBounds (row.removeFromLeft (knob));
+    row.removeFromLeft (gap);
+
+    adaptiveBias.setBounds (row.removeFromLeft (260).withTrimmedTop (34).withHeight (26));
+    row.removeFromLeft (gap);
+    stereoLink.setBounds (row.removeFromLeft (260).withTrimmedTop (34).withHeight (26));
+    row.removeFromLeft (gap);
+    oversamplingMin.setBounds (row.removeFromLeft (100).withTrimmedTop (34).withHeight (26));
+
+    b.removeFromTop (10);
+    grMeter.setBounds (b.removeFromTop (110));
+
+    auto m = grMeter.getBounds();
+    currentGrLabel.setBounds (m.getRight() - 90, m.getY() + 6, 84, 18);
+}
+
+================================================================================
+FILE: Source/Plugin/PluginEditor.h
+================================================================================
+#pragma once
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <cmath>
+#include "PluginProcessor.h"
+
+class GRHistoryMeter final : public juce::Component
+{
+public:
+    void pushValueDb (float grDb) noexcept
+    {
+        if (! std::isfinite (grDb)) grDb = 0.0f;
+        grDb = juce::jlimit (-60.0f, 0.0f, grDb);
+
+        history[(size_t) head] = grDb;
+        head = (head + 1) % kMax;
+        if (head == 0) filled = true;
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        auto r = getLocalBounds().toFloat().reduced (6.0f);
+
+        // Restrained background (observational, no drama)
+        g.setColour (juce::Colours::white.withAlpha (0.10f));
+        g.fillRoundedRectangle (r, 8.0f);
+
+        auto yForDb = [&] (float db) -> float
+        {
+            const float n = (juce::jlimit (-60.0f, 0.0f, db) + 60.0f) / 60.0f; // 0..1
+            return r.getBottom() - r.getHeight() * n; // 0 dB at top, -60 dB at bottom
+        };
+
+        const int count = filled ? kMax : head;
+        if (count > 2)
+        {
+            juce::Path p;
+            const float dx = r.getWidth() / (float) (count - 1);
+
+            auto sampleAt = [&] (int i) -> float
+            {
+                const int idx = filled ? (head + i) % kMax : i;
+                return history[(size_t) idx];
+            };
+
+            p.startNewSubPath (r.getX(), yForDb (sampleAt (0)));
+            for (int i = 1; i < count; ++i)
+                p.lineTo (r.getX() + dx * (float) i, yForDb (sampleAt (i)));
+
+            // History path only (primary + only visual)
+            g.setColour (juce::Colours::white.withAlpha (0.60f));
+            g.strokePath (p, juce::PathStrokeType (1.5f));
+        }
+    }
+
+private:
+    static constexpr int kMax = 120;
+    std::array<float, (size_t) kMax> history {};
+    int head = 0;
+    bool filled = false;
+};
+
+class CompassMasteringLimiterAudioProcessorEditor final
+    : public juce::AudioProcessorEditor
+    , private juce::Timer
+{
+public:
+    explicit CompassMasteringLimiterAudioProcessorEditor (CompassMasteringLimiterAudioProcessor&);
+    ~CompassMasteringLimiterAudioProcessorEditor() override = default;
+
+    void paint (juce::Graphics&) override;
+    void resized() override;
+
+private:
+    void timerCallback() override;
+
+    CompassMasteringLimiterAudioProcessor& processor;
+
+    juce::Slider drive;
+    juce::Slider ceiling;
+    juce::ComboBox adaptiveBias;
+    juce::Slider stereoLink;
+    juce::ComboBox oversamplingMin;
+
+    GRHistoryMeter grMeter;
+    juce::Label currentGrLabel;
+
+    using APVTS = juce::AudioProcessorValueTreeState;
+    std::unique_ptr<APVTS::SliderAttachment> driveA;
+    std::unique_ptr<APVTS::SliderAttachment> ceilingA;
+    std::unique_ptr<APVTS::ComboBoxAttachment> biasA;
+    std::unique_ptr<APVTS::SliderAttachment> linkA;
+    std::unique_ptr<APVTS::ComboBoxAttachment> osA;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompassMasteringLimiterAudioProcessorEditor)
+};
+
+================================================================================
+FILE: Source/Plugin/PluginProcessor.cpp
+================================================================================
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
@@ -915,3 +1155,163 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new CompassMasteringLimiterAudioProcessor();
 }
+
+================================================================================
+FILE: Source/Plugin/PluginProcessor.h
+================================================================================
+#pragma once
+#include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_audio_basics/juce_audio_basics.h>
+#include <juce_dsp/juce_dsp.h>
+#include <array>
+#include <memory>
+#include <atomic>
+
+class CompassMasteringLimiterAudioProcessor final : public juce::AudioProcessor
+{
+public:
+    using APVTS = juce::AudioProcessorValueTreeState;
+
+    CompassMasteringLimiterAudioProcessor();
+    ~CompassMasteringLimiterAudioProcessor() override = default;
+
+    void prepareToPlay (double sampleRate, int samplesPerBlock) override;
+    void releaseResources() override;
+
+    bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
+
+    void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    void processBlockBypassed (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+
+    juce::AudioProcessorEditor* createEditor() override;
+    bool hasEditor() const override { return true; }
+
+    const juce::String getName() const override { return "Compass Mastering Limiter"; }
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+    bool isMidiEffect() const override { return false; }
+    double getTailLengthSeconds() const override { return 0.0; }
+
+    int getNumPrograms() override { return 1; }
+    int getCurrentProgram() override { return 0; }
+    void setCurrentProgram (int) override {}
+    const juce::String getProgramName (int) override { return {}; }
+    void changeProgramName (int, const juce::String&) override {}
+
+    void getStateInformation (juce::MemoryBlock&) override;
+    void setStateInformation (const void*, int) override;
+
+    APVTS& getAPVTS() noexcept { return *apvts; }
+    const APVTS& getAPVTS() const noexcept { return *apvts; }
+
+    float getCurrentGRDb() const noexcept { return grDbForUI.load(std::memory_order_relaxed); }
+
+private:
+    static APVTS::ParameterLayout createParameterLayout();
+
+    // Gate-3 deterministic state model:
+    void reset (double sampleRate, int maxBlock, int channels) noexcept;
+
+    // Oversampling + True Peak (Gate-4):
+    // - FIR polyphase only (linear-phase reconstruction)
+    // - Oversampling is prebuilt in prepareToPlay (no allocations in audio thread)
+    // - Active oversampling selection changes only on transport stop/start edge
+    void prepareOversampling (int channels, int maxBlock);
+    void selectOversamplingAtBoundary (int osMinIndex) noexcept;
+    void measureTruePeak (const juce::AudioBuffer<float>& buffer) noexcept;
+
+    // Phase D: promoted helpers (no allocations, no virtual dispatch)
+    static double onePoleAlpha (double tauSec, double dtSec) noexcept;
+    void processOneSample (float* const* chPtr,
+                          int numCh,
+                          int i,
+                          double dt,
+                          double driveDb,
+                          double ceilingDb,
+                          double bias01,
+                          double link01,
+                          double& grDbNegMin) noexcept;
+
+    // Gate-2 smoothing policy (declared now; configured in prepareToPlay/reset):
+    // - Drive/Ceiling: sample-accurate linear ramps (SmoothedValue)
+    // - Stereo Link / Adaptive Bias: smoothed (SmoothedValue)
+    // - Oversampling Min: discrete choice (no smoothing)
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> driveDbSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> ceilingDbSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> adaptiveBias01Smoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> stereoLink01Smoothed;
+
+    // Deterministic lifecycle context (captured in prepareToPlay/reset):
+    double lastSampleRate = 0.0;
+    double lastInvSampleRate = 0.0; // cached 1 / lastSampleRate (SR-derived coeff scalar)
+    double effectiveControlInvDt = 0.0; // 1.0 / nativeSR
+    double effectiveAudioInvDt   = 0.0; // 1.0 / (nativeSR * OSFactor); OSFactor=1.0 for now
+    int lastMaxBlock = 0;
+    int lastChannels = 0;
+
+    // Transport edge detection (stop/start triggers reset semantics):
+    bool transportKnown = false;
+    bool lastTransportPlaying = false;
+
+    // Oversampling (prebuilt instances; selected at transport-safe boundary only)
+    static constexpr int kOsCount = 3; // 2x / 4x / 8x
+    std::array<std::unique_ptr<juce::dsp::Oversampling<float>>, kOsCount> oversamplers;
+    juce::dsp::Oversampling<float>* activeOversampler = nullptr;
+    std::array<int, kOsCount> oversamplerLatencySamples { 0, 0, 0 };
+    int latchedOsMinIndex = 0; // 0=2x, 1=4x, 2=8x (latched only at boundary)
+
+    // Control-domain true peak (linear)
+    double truePeakLin = 0.0;
+
+    // UI meter readout (GR in dB, negative: 0..-60). Published once per block (atomic, lock-free).
+    std::atomic<float> grDbForUI { 0.0f };
+
+
+    // Output scalar continuity (tiny, deterministic) — prevents micro-steps reaching the output
+    std::array<float, 2> lastOutScalar { 1.0f, 1.0f };
+    // Guards + Safety Rails (Gate-10):
+    // - Hard bounds: attenuation depth already clamped via kMaxAttnDb in processBlock
+    // - Slew limiting: prevents extreme step changes from bad automation or math glitches
+    std::array<double, 2> lastAppliedAttnDb { 0.0, 0.0 };
+
+    // Tiny GR floor + hysteresis memory (per-channel) to prevent threshold chatter (observational behavior unchanged)
+    std::array<double, 2> lastAttnTargetDb { 0.0, 0.0 };
+
+    // CPU overload behavior: temporarily disable non-essential measurement extras (never changes user settings)
+    int overloadAssistBlocks = 0;
+
+    // NaN/Inf containment latch (release): if tripped, block output is forced safe and internal state resets
+    bool badMathThisBlock = false;
+
+    // Envelope system (Micro + Macro, coupled)
+    // Micro: critically damped 2nd-order model (no overshoot; ultra-fast capture; no ringing)
+    // Discrete-time implementation: two cascaded one-pole followers (stable for any dt; no stiffness).
+    // Macro: energy accumulation + exponential decay (bounded; monotonic)
+    // Coupling: macro state influences micro recovery behavior (no competing control paths)
+    std::array<double, 2> microStage1DbState { 0.0, 0.0 };
+    std::array<double, 2> microStage2DbState { 0.0, 0.0 };
+    std::array<double, 2> macroEnergyState   { 0.0, 0.0 };
+
+    // Gate: Adaptive Release inputs (deterministic, bounded, continuous)
+    // - Crest factor proxy: short RMS energy accumulator (per-channel)
+    // - Event density: continuous "event presence" accumulator (per-channel)
+    std::array<double, 2> crestRmsSqState    { 0.0, 0.0 };
+    std::array<double, 2> eventDensityState  { 0.0, 0.0 };
+
+    // Spectral Guardrails (measurement-only; broadband application)
+    // Parallel measurement path:
+    // - frequency-selective measurement allowed
+    // - must not influence detector/envelope timing/shape
+    // - may only add subtle broadband GR under heavy limiting
+    std::array<double, 2> guardLpState { 0.0, 0.0 }; // one-pole LP state for split
+    std::array<double, 2> guardTotE   { 0.0, 0.0 }; // total energy EMA
+    std::array<double, 2> guardHiE    { 0.0, 0.0 }; // high-band energy EMA
+
+    // Scratch buffer for oversampled measurement (double precision)
+    juce::AudioBuffer<float> workBufferFloat;
+
+    std::unique_ptr<APVTS> apvts;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompassMasteringLimiterAudioProcessor)
+};
+

@@ -59,6 +59,18 @@ private:
     void selectOversamplingAtBoundary (int osMinIndex) noexcept;
     void measureTruePeak (const juce::AudioBuffer<float>& buffer) noexcept;
 
+    // Phase D: promoted helpers (no allocations, no virtual dispatch)
+    static double onePoleAlpha (double tauSec, double dtSec) noexcept;
+    void processOneSample (float* const* chPtr,
+                          int numCh,
+                          int i,
+                          double dt,
+                          double driveDb,
+                          double ceilingDb,
+                          double bias01,
+                          double link01,
+                          double& grDbNegMin) noexcept;
+
     // Gate-2 smoothing policy (declared now; configured in prepareToPlay/reset):
     // - Drive/Ceiling: sample-accurate linear ramps (SmoothedValue)
     // - Stereo Link / Adaptive Bias: smoothed (SmoothedValue)
@@ -92,6 +104,23 @@ private:
 
     // UI meter readout (GR in dB, negative: 0..-60). Published once per block (atomic, lock-free).
     std::atomic<float> grDbForUI { 0.0f };
+
+
+    // Output scalar continuity (tiny, deterministic) — prevents micro-steps reaching the output
+    std::array<float, 2> lastOutScalar { 1.0f, 1.0f };
+    // Guards + Safety Rails (Gate-10):
+    // - Hard bounds: attenuation depth already clamped via kMaxAttnDb in processBlock
+    // - Slew limiting: prevents extreme step changes from bad automation or math glitches
+    std::array<double, 2> lastAppliedAttnDb { 0.0, 0.0 };
+
+    // Tiny GR floor + hysteresis memory (per-channel) to prevent threshold chatter (observational behavior unchanged)
+    std::array<double, 2> lastAttnTargetDb { 0.0, 0.0 };
+
+    // CPU overload behavior: temporarily disable non-essential measurement extras (never changes user settings)
+    int overloadAssistBlocks = 0;
+
+    // NaN/Inf containment latch (release): if tripped, block output is forced safe and internal state resets
+    bool badMathThisBlock = false;
 
     // Envelope system (Micro + Macro, coupled)
     // Micro: critically damped 2nd-order model (no overshoot; ultra-fast capture; no ringing)
