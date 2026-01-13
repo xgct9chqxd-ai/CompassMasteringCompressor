@@ -26,8 +26,9 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
 
     setRotary (ceiling);
     addAndMakeVisible (ceiling);
-    adaptiveBias.setSliderStyle (juce::Slider::LinearHorizontal);
-    adaptiveBias.setTextBoxStyle (juce::Slider::TextBoxRight, false, 90, 20);
+    adaptiveBias.addItem ("Transparent", 1);
+    adaptiveBias.addItem ("Balanced", 2);
+    adaptiveBias.addItem ("Aggressive", 3);
     addAndMakeVisible (adaptiveBias);
 
     stereoLink.setSliderStyle (juce::Slider::LinearHorizontal);
@@ -43,11 +44,19 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
     grMeter.setInterceptsMouseClicks (false, false);
     grMeter.toBack();
 
+    currentGrLabel.setJustificationType (juce::Justification::centredRight);
+    currentGrLabel.setFont (juce::Font (14.0f));
+    currentGrLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    currentGrLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    currentGrLabel.setInterceptsMouseClicks (false, false);
+    currentGrLabel.setText ("0.0 dB", juce::dontSendNotification);
+    addAndMakeVisible (currentGrLabel);
+
     auto& vts = processor.getAPVTS();
 
     driveA   = std::make_unique<APVTS::SliderAttachment> (vts, "drive", drive);
     ceilingA = std::make_unique<APVTS::SliderAttachment> (vts, "ceiling", ceiling);
-    biasA    = std::make_unique<APVTS::SliderAttachment> (vts, "adaptive_bias", adaptiveBias);
+    biasA    = std::make_unique<APVTS::ComboBoxAttachment> (vts, "adaptive_bias", adaptiveBias);
     linkA    = std::make_unique<APVTS::SliderAttachment> (vts, "stereo_link", stereoLink);
     osA      = std::make_unique<APVTS::ComboBoxAttachment> (vts, "oversampling_min", oversamplingMin);
 
@@ -56,7 +65,11 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
 
 void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
 {
-    grMeter.pushValueDb (processor.getCurrentGRDb());
+    const float current = processor.getCurrentGRDb();
+
+    grMeter.pushValueDb (current);
+    currentGrLabel.setText (juce::String::formatted ("%.1f dB", current), juce::dontSendNotification);
+
     grMeter.repaint();
 }
 
@@ -109,4 +122,7 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
 
     b.removeFromTop (10);
     grMeter.setBounds (b.removeFromTop (110));
+
+    auto m = grMeter.getBounds();
+    currentGrLabel.setBounds (m.getRight() - 90, m.getY() + 6, 84, 18);
 }

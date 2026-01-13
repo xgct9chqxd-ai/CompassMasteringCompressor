@@ -108,6 +108,15 @@ private:
     std::array<double, 2> crestRmsSqState    { 0.0, 0.0 };
     std::array<double, 2> eventDensityState  { 0.0, 0.0 };
 
+    // Spectral Guardrails (measurement-only; broadband application)
+    // Parallel measurement path:
+    // - frequency-selective measurement allowed
+    // - must not influence detector/envelope timing/shape
+    // - may only add subtle broadband GR under heavy limiting
+    std::array<double, 2> guardLpState { 0.0, 0.0 }; // one-pole LP state for split
+    std::array<double, 2> guardTotE   { 0.0, 0.0 }; // total energy EMA
+    std::array<double, 2> guardHiE    { 0.0, 0.0 }; // high-band energy EMA
+
     // Scratch buffer for oversampled measurement (double precision)
     juce::AudioBuffer<float> workBufferFloat;
 

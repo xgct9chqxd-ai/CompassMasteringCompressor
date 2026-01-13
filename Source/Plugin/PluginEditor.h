@@ -20,19 +20,15 @@ public:
     {
         auto r = getLocalBounds().toFloat().reduced (6.0f);
 
+        // Restrained background (observational, no drama)
         g.setColour (juce::Colours::white.withAlpha (0.10f));
         g.fillRoundedRectangle (r, 8.0f);
 
-        const int last = (head - 1 + kMax) % kMax;
-        const float curDb = history[(size_t) last];
-        const float norm = (curDb + 60.0f) / 60.0f;
-
-        auto bar = r;
-        bar.setY (r.getBottom() - r.getHeight() * norm);
-        bar.setHeight (r.getHeight() * norm);
-
-        g.setColour (juce::Colours::white.withAlpha (0.65f));
-        g.fillRoundedRectangle (bar, 6.0f);
+        auto yForDb = [&] (float db) -> float
+        {
+            const float n = (juce::jlimit (-60.0f, 0.0f, db) + 60.0f) / 60.0f; // 0..1
+            return r.getBottom() - r.getHeight() * n; // 0 dB at top, -60 dB at bottom
+        };
 
         const int count = filled ? kMax : head;
         if (count > 2)
@@ -40,23 +36,18 @@ public:
             juce::Path p;
             const float dx = r.getWidth() / (float) (count - 1);
 
-            auto sampleAt = [&](int i) -> float
+            auto sampleAt = [&] (int i) -> float
             {
                 const int idx = filled ? (head + i) % kMax : i;
                 return history[(size_t) idx];
-            };
-
-            auto yForDb = [&](float db) -> float
-            {
-                const float n = (juce::jlimit (-60.0f, 0.0f, db) + 60.0f) / 60.0f;
-                return r.getBottom() - r.getHeight() * n;
             };
 
             p.startNewSubPath (r.getX(), yForDb (sampleAt (0)));
             for (int i = 1; i < count; ++i)
                 p.lineTo (r.getX() + dx * (float) i, yForDb (sampleAt (i)));
 
-            g.setColour (juce::Colours::white.withAlpha (0.35f));
+            // History path only (primary + only visual)
+            g.setColour (juce::Colours::white.withAlpha (0.60f));
             g.strokePath (p, juce::PathStrokeType (1.5f));
         }
     }
@@ -86,17 +77,18 @@ private:
 
     juce::Slider drive;
     juce::Slider ceiling;
-    juce::Slider adaptiveBias;
-juce::Slider stereoLink;
+    juce::ComboBox adaptiveBias;
+    juce::Slider stereoLink;
     juce::ComboBox oversamplingMin;
 
     GRHistoryMeter grMeter;
+    juce::Label currentGrLabel;
 
     using APVTS = juce::AudioProcessorValueTreeState;
     std::unique_ptr<APVTS::SliderAttachment> driveA;
     std::unique_ptr<APVTS::SliderAttachment> ceilingA;
-    std::unique_ptr<APVTS::SliderAttachment> biasA;
-std::unique_ptr<APVTS::SliderAttachment> linkA;
+    std::unique_ptr<APVTS::ComboBoxAttachment> biasA;
+    std::unique_ptr<APVTS::SliderAttachment> linkA;
     std::unique_ptr<APVTS::ComboBoxAttachment> osA;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompassMasteringLimiterAudioProcessorEditor)
