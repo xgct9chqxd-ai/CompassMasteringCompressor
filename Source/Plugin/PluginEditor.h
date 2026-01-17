@@ -9,54 +9,38 @@ public:
     void pushValueDb (float grDb) noexcept
     {
         if (! std::isfinite (grDb)) grDb = 0.0f;
-        grDb = juce::jlimit (-60.0f, 0.0f, grDb);
 
-        history[(size_t) head] = grDb;
-        head = (head + 1) % kMax;
-        if (head == 0) filled = true;
+        // UI contract: GR is stereo authority in positive dB (0..range).
+        constexpr float kRangeDb = 24.0f;
+        lastGrDb = juce::jlimit (0.0f, kRangeDb, grDb);
     }
 
     void paint (juce::Graphics& g) override
     {
         auto r = getLocalBounds().toFloat().reduced (6.0f);
 
-        // Restrained background (observational, no drama)
+        // Background
         g.setColour (juce::Colours::white.withAlpha (0.10f));
         g.fillRoundedRectangle (r, 8.0f);
 
-        auto yForDb = [&] (float db) -> float
-        {
-            const float n = (juce::jlimit (-60.0f, 0.0f, db) + 60.0f) / 60.0f; // 0..1
-            return r.getBottom() - r.getHeight() * n; // 0 dB at top, -60 dB at bottom
-        };
+        // Filled bar (left -> right as GR increases)
+        constexpr float kRangeDb = 24.0f;
+        const float fill01 = juce::jlimit (0.0f, 1.0f, lastGrDb / kRangeDb);
+        auto fillR = r;
+        fillR.setWidth (r.getWidth() * fill01);
 
-        const int count = filled ? kMax : head;
-        if (count > 2)
-        {
-            juce::Path p;
-            const float dx = r.getWidth() / (float) (count - 1);
+        g.setColour (juce::Colours::white.withAlpha (0.60f));
+        g.fillRoundedRectangle (fillR, 8.0f);
 
-            auto sampleAt = [&] (int i) -> float
-            {
-                const int idx = filled ? (head + i) % kMax : i;
-                return history[(size_t) idx];
-            };
-
-            p.startNewSubPath (r.getX(), yForDb (sampleAt (0)));
-            for (int i = 1; i < count; ++i)
-                p.lineTo (r.getX() + dx * (float) i, yForDb (sampleAt (i)));
-
-            // History path only (primary + only visual)
-            g.setColour (juce::Colours::white.withAlpha (0.60f));
-            g.strokePath (p, juce::PathStrokeType (1.5f));
-        }
+        // Label "GR"
+        auto labelR = r.reduced (10.0f, 6.0f);
+        g.setColour (juce::Colours::white.withAlpha (0.70f));
+        g.setFont (12.5f);
+        g.drawText ("GR", labelR.removeFromLeft (34.0f), juce::Justification::centredLeft, false);
     }
 
 private:
-    static constexpr int kMax = 120;
-    std::array<float, (size_t) kMax> history {};
-    int head = 0;
-    bool filled = false;
+    float lastGrDb = 0.0f;
 };
 
 class CompassMasteringLimiterAudioProcessorEditor final
@@ -83,6 +67,14 @@ private:
 
     GRHistoryMeter grMeter;
     juce::Label currentGrLabel;
+    juce::Label inTpLabel;
+    juce::Label outTpLabel;
+    juce::Label lufsSLabel;
+    juce::Label lufsILabel;
+
+    juce::Label inPeakLabel;
+    juce::Label outPeakLabel;
+    juce::Label ceilingLabel;
 
     using APVTS = juce::AudioProcessorValueTreeState;
     std::unique_ptr<APVTS::SliderAttachment> driveA;

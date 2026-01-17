@@ -117,16 +117,6 @@ void CompassMasteringLimiterAudioProcessor::reset (double sampleRate, int maxBlo
         grHoldDb[c]    = 0.0;
     }
 
-    // Loudness reset (deterministic; bounded; allocation-free).
-    lufsChunkE.fill (0.0);
-    lufsChunkWrite  = 0u;
-    lufsChunkFilled = 0u;
-    lufsShortSumE   = 0.0;
-    lufsCurChunkE   = 0.0;
-    lufsCurChunkN   = 0;
-    lufsIntSumE     = 0.0;
-    lufsIntN        = 0u;
-
     // Publication bookkeeping reset (deterministic; lock-free). Do NOT clear meterRing here (reset() may run on audio thread).
     meterWriteIndex.store (0u, std::memory_order_relaxed);
     meterReadIndex.store  (0u, std::memory_order_relaxed);
@@ -683,6 +673,27 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
             const int osCh = (int) osBlock.getNumChannels();
             const int osN  = (int) osBlock.getNumSamples();
 
+            // TP (input side): oversampled scan, linear domain.
+            // Guard: holds are [2]; never index beyond [0..1].
+            {
+                const int tpCh = juce::jmin (2, osCh);
+                for (int c = 0; c < tpCh; ++c)
+                {
+                    const float* p = osBlock.getChannelPointer ((size_t) c);
+
+                    double inTpMax = 0.0;
+                    for (int i = 0; i < osN; ++i)
+                    {
+                        const double a = std::abs ((double) p[i]);
+                        if (a > inTpMax) inTpMax = a;
+                    }
+
+                    if (! std::isfinite (inTpMax)) inTpMax = 0.0;
+                    inTpHold[(size_t) c] = juce::jmax (inTpHold[(size_t) c], inTpMax);
+                }
+            }
+
+
             const int osFactor = juce::jmax (1, (int) activeOversampler->getOversamplingFactor());
             const double dtOS  = lastInvSampleRate / (double) osFactor;
 
@@ -700,7 +711,6 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
                 osPtrArr[(size_t) c] = (c < osCached ? osPtr[(size_t) c] : osBlock.getChannelPointer ((size_t) c));
 
             double grDbNegMin = 0.0; // 0 dB (no reduction) down to -kMaxAttnDb
-            const int tpCh = juce::jmin (2, numChEff);
 
             
 
@@ -722,26 +732,30 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
                     if (i >= osN)
                         break;
 
-                    for (int c = 0; c < tpCh; ++c)
-                    {
-                        const double a = std::abs ((double) osPtrArr[(size_t) c][i]);
-                        if (std::isfinite (a))
-                            inTpHold[(size_t) c] = juce::jmax (inTpHold[(size_t) c], a);
-                    }
-
                     processOneSample (osPtrArr.data(), numChEff, i, dtOS, driveDb, ceilingDb, bias01, link01, grDbNegMin);
-
-                    for (int c = 0; c < tpCh; ++c)
-                    {
-                        const double a = std::abs ((double) osPtrArr[(size_t) c][i]);
-                        if (std::isfinite (a))
-                            outTpHold[(size_t) c] = juce::jmax (outTpHold[(size_t) c], a);
-                    }
                 }
             }
 
             grDbForUI.store ((float) juce::jlimit (0.0, 120.0, -grDbNegMin), std::memory_order_relaxed);
 
+            // Downsample back into blockN (workBufferFloat, native-rate length n)
+            // TP (output side): oversampled scan after attenuation, linear domain.
+            // Guard: holds are [2]; never index beyond [0..1].
+            {
+                const int tpCh = juce::jmin (2, osCh);
+                for (int c = 0; c < tpCh; ++c)
+                {
+                    const float* p = osBlock.getChannelPointer ((size_t) c);
+                    double tpMax = 0.0;
+                    for (int i = 0; i < osN; ++i)
+                    {
+                        const double a = std::abs ((double) p[i]);
+                        if (a > tpMax) tpMax = a;
+                    }
+                    if (! std::isfinite (tpMax)) tpMax = 0.0;
+                    outTpHold[(size_t) c] = juce::jmax (outTpHold[(size_t) c], tpMax);
+                }
+            }
 
             activeOversampler->processSamplesDown (blockN);
 
@@ -768,7 +782,6 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
         else
         {
             // Native-rate fallback (prior behavior). No allocations. Deterministic.
-            // Phase 11 note: input TP is sample-peak here unless/until true-peak is enabled for this path; do not add a new OS path just for input TP.
             constexpr int kChCacheMax = 8;
             std::array<float*, (size_t) kChCacheMax> chPtr {};
             const int chCached = juce::jmin (numCh, kChCacheMax);
@@ -793,183 +806,10 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
                 const double bias01    = juce::jlimit (0.0, 1.0, (double) adaptiveBias01Smoothed.getNextValue());
                 const double link01    = juce::jlimit (0.0, 1.0, (double) stereoLink01Smoothed.getNextValue());
 
-                const int tpCh = juce::jmin (2, numChEff);
-                for (int c = 0; c < tpCh; ++c)
-                {
-                    const double a = std::abs ((double) chPtrArr[(size_t) c][i]);
-                    if (std::isfinite (a))
-                        inTpHold[(size_t) c] = juce::jmax (inTpHold[(size_t) c], a);
-                }
-
                 processOneSample (chPtrArr.data(), numChEff, i, lastInvSampleRate, driveDb, ceilingDb, bias01, link01, grDbNegMin);
             }
 
             grDbForUI.store ((float) juce::jlimit (0.0, 120.0, -grDbNegMin), std::memory_order_relaxed);
-        }
-    }
-
-    // Loudness update (Phase 11): from final native-rate output buffer (post-DSP).
-    // Deterministic, bounded, no allocations.
-    if (meterPublishSamples > 0)
-    {
-        const int numCh = juce::jmin (2, buffer.getNumChannels());
-        const int n = buffer.getNumSamples();
-
-        for (int i = 0; i < n; ++i)
-        {
-            double e = 0.0;
-            if (numCh >= 2)
-            {
-                const double y0 = (double) buffer.getSample (0, i);
-                const double y1 = (double) buffer.getSample (1, i);
-                e = 0.5 * (y0 * y0 + y1 * y1);
-            }
-            else if (numCh == 1)
-            {
-                const double y0 = (double) buffer.getSample (0, i);
-                e = (y0 * y0);
-            }
-
-            if (! std::isfinite (e) || e < 0.0) e = 0.0;
-            e = juce::jlimit (0.0, 1.0e12, e);
-
-            lufsCurChunkE += e;
-            lufsCurChunkN += 1;
-
-            lufsIntSumE += e;
-            lufsIntN    += 1u;
-
-            if (lufsCurChunkN >= meterPublishSamples)
-            {
-                const double oldE = lufsChunkE[(size_t) lufsChunkWrite];
-                if (lufsChunkFilled >= (uint32_t) kLufsShortChunks)
-                    lufsShortSumE -= oldE;
-                else
-                    lufsChunkFilled += 1u;
-
-                lufsChunkE[(size_t) lufsChunkWrite] = lufsCurChunkE;
-                lufsShortSumE += lufsCurChunkE;
-
-                lufsChunkWrite = (lufsChunkWrite + 1u) % (uint32_t) kLufsShortChunks;
-
-                lufsCurChunkE = 0.0;
-                lufsCurChunkN = 0;
-            }
-        }
-    }
-
-    // Meter publish cadence (~50 Hz). Publish latest holds (bounded), then reset holds.
-    // Audio thread: must remain allocation-free and lock-free.
-    if (meterPublishSamples > 0)
-    {
-        meterCountdown -= buffer.getNumSamples();
-        while (meterCountdown <= 0)
-        {
-            MeterSnapshot s{};
-
-            constexpr double kEps = 1.0e-12;
-
-            for (int c = 0; c < 2; ++c)
-            {
-                double x = inPeakHold[c];
-                if (! std::isfinite (x) || x < 0.0) x = 0.0;
-                x = juce::jlimit (0.0, 1.0e6, x);
-                double db = 20.0 * std::log10 (x + kEps);
-                s.inPeakDb[c] = juce::jlimit (-120.0, 60.0, db);
-
-                x = outPeakHold[c];
-                if (! std::isfinite (x) || x < 0.0) x = 0.0;
-                x = juce::jlimit (0.0, 1.0e6, x);
-                db = 20.0 * std::log10 (x + kEps);
-                s.outPeakDb[c] = juce::jlimit (-120.0, 60.0, db);
-
-                x = inTpHold[c];
-                if (! std::isfinite (x) || x < 0.0) x = 0.0;
-                x = juce::jlimit (0.0, 1.0e6, x);
-                db = 20.0 * std::log10 (x + kEps);
-                s.inTpDb[c] = juce::jlimit (-120.0, 60.0, db);
-
-                x = outTpHold[c];
-                if (! std::isfinite (x) || x < 0.0) x = 0.0;
-                x = juce::jlimit (0.0, 1.0e6, x);
-                db = 20.0 * std::log10 (x + kEps);
-                s.outTpDb[c] = juce::jlimit (-120.0, 60.0, db);
-
-                x = grHoldDb[c];
-                if (! std::isfinite (x) || x < 0.0) x = 0.0;
-                s.grDb[c] = juce::jlimit (0.0, 120.0, x);
-            }
-
-            // Crest factor (broadband): stereo peak minus stereo RMS.
-            // Stereo peak: max(L,R). Stereo RMS: max-energy channel (max sumSq) -> RMS dB.
-            {
-                const double win = (double) juce::jmax (1, meterPublishSamples);
-
-                const double inPeakStereoDb  = juce::jmax (s.inPeakDb[0],  s.inPeakDb[1]);
-                const double outPeakStereoDb = juce::jmax (s.outPeakDb[0], s.outPeakDb[1]);
-
-                double inSumSqSel = juce::jmax (inRmsSq[0], inRmsSq[1]);
-                if (! std::isfinite (inSumSqSel) || inSumSqSel < 0.0) inSumSqSel = 0.0;
-                inSumSqSel = juce::jlimit (0.0, 1.0e12, inSumSqSel);
-                double inRmsStereoDb = 10.0 * std::log10 ((inSumSqSel / win) + kEps);
-                if (! std::isfinite (inRmsStereoDb)) inRmsStereoDb = -120.0;
-                inRmsStereoDb = juce::jlimit (-120.0, 60.0, inRmsStereoDb);
-
-                double outSumSqSel = juce::jmax (outRmsSq[0], outRmsSq[1]);
-                if (! std::isfinite (outSumSqSel) || outSumSqSel < 0.0) outSumSqSel = 0.0;
-                outSumSqSel = juce::jlimit (0.0, 1.0e12, outSumSqSel);
-                double outRmsStereoDb = 10.0 * std::log10 ((outSumSqSel / win) + kEps);
-                if (! std::isfinite (outRmsStereoDb)) outRmsStereoDb = -120.0;
-                outRmsStereoDb = juce::jlimit (-120.0, 60.0, outRmsStereoDb);
-
-                double crest = inPeakStereoDb - inRmsStereoDb;
-                if (! std::isfinite (crest)) crest = 0.0;
-                s.crestPreDb = juce::jlimit (-60.0, 120.0, crest);
-
-                crest = outPeakStereoDb - outRmsStereoDb;
-                if (! std::isfinite (crest)) crest = 0.0;
-                s.crestPostDb = juce::jlimit (-60.0, 120.0, crest);
-            }
-
-            // Loudness (Phase 11): unweighted energy, deterministic. Bounded for UI sanity.
-            {
-                constexpr double kEps = 1.0e-18;
-                constexpr double kOffset = -0.691; // LUFS-style offset (unweighted here by constitution)
-
-                const double shortE = lufsShortSumE + lufsCurChunkE;
-                const double shortN = (double) (lufsChunkFilled) * (double) juce::jmax (1, meterPublishSamples) + (double) lufsCurChunkN;
-                double msShort = (shortN > 0.0 ? (shortE / shortN) : 0.0);
-                if (! std::isfinite (msShort) || msShort < 0.0) msShort = 0.0;
-                msShort = juce::jlimit (0.0, 1.0e12, msShort);
-
-                double lufsShort = kOffset + 10.0 * std::log10 (msShort + kEps);
-                if (! std::isfinite (lufsShort)) lufsShort = -120.0;
-                s.lufsShortDb = juce::jlimit (-120.0, 60.0, lufsShort);
-
-                const double intN = (double) lufsIntN;
-                double msInt = (intN > 0.0 ? (lufsIntSumE / intN) : 0.0);
-                if (! std::isfinite (msInt) || msInt < 0.0) msInt = 0.0;
-                msInt = juce::jlimit (0.0, 1.0e12, msInt);
-
-                double lufsInt = kOffset + 10.0 * std::log10 (msInt + kEps);
-                if (! std::isfinite (lufsInt)) lufsInt = -120.0;
-                s.lufsIntDb = juce::jlimit (-120.0, 60.0, lufsInt);
-            }
-
-            publishMeters (s);
-
-            for (int c = 0; c < 2; ++c)
-            {
-                inPeakHold[c]  = 0.0;
-                outPeakHold[c] = 0.0;
-                inRmsSq[c]     = 0.0;
-                outRmsSq[c]    = 0.0;
-                inTpHold[c]    = 0.0;
-                outTpHold[c]   = 0.0;
-                grHoldDb[c]    = 0.0;
-            }
-
-            meterCountdown += meterPublishSamples;
         }
     }
 

@@ -46,60 +46,6 @@ public:
 
     float getCurrentGRDb() const noexcept { return grDbForUI.load(std::memory_order_relaxed); }
 
-    bool getCurrentTruePeakDbTP (float& inDbTP, float& outDbTP) const noexcept
-    {
-        MeterSnapshot s{};
-        if (! readMeters (s))
-            return false;
-
-        const double inStereo  = juce::jmax (s.inTpDb[0],  s.inTpDb[1]);
-        const double outStereo = juce::jmax (s.outTpDb[0], s.outTpDb[1]);
-
-        const double inClamped  = juce::jlimit (-120.0, 60.0, inStereo);
-        const double outClamped = juce::jlimit (-120.0, 60.0, outStereo);
-
-        inDbTP  = (float) inClamped;
-        outDbTP = (float) outClamped;
-        return true;
-    }
-
-    bool getCurrentLufsDb (float& lufsS, float& lufsI) const noexcept
-    {
-        MeterSnapshot s{};
-        if (! readMeters (s))
-            return false;
-
-        const double sClamped = juce::jlimit (-120.0, 60.0, s.lufsShortDb);
-        const double iClamped = juce::jlimit (-120.0, 60.0, s.lufsIntDb);
-
-        lufsS = (float) sClamped;
-        lufsI = (float) iClamped;
-        return true;
-    }
-
-    bool getCurrentPeakDbFS (float& inDbFS, float& outDbFS) const noexcept
-    {
-        MeterSnapshot s{};
-        if (! readMeters (s))
-            return false;
-
-        const double inStereo  = juce::jmax (s.inPeakDb[0],  s.inPeakDb[1]);
-        const double outStereo = juce::jmax (s.outPeakDb[0], s.outPeakDb[1]);
-
-        const double inClamped  = juce::jlimit (-120.0, 60.0, inStereo);
-        const double outClamped = juce::jlimit (-120.0, 60.0, outStereo);
-
-        inDbFS  = (float) inClamped;
-        outDbFS = (float) outClamped;
-        return true;
-    }
-
-    float getCurrentCeilingDbTP() const noexcept
-    {
-        const float v = apvts->getRawParameterValue ("ceiling")->load();
-        return (float) juce::jlimit (-120.0f, 60.0f, v);
-    }
-
 private:
     static APVTS::ParameterLayout createParameterLayout();
 
@@ -123,64 +69,6 @@ private:
         uint64_t frameCounter  = 0; // monotonic debug-only counter
     };
 
-    // Meter publication primitive (SPSC ring, lock-free; declarations only in this step).
-    // Producer: audio thread. Consumer: UI thread.
-    //
-    // Publication rules:
-    // - Audio thread writes at a fixed cadence (e.g., every 256 or 512 samples).
-    // - If ring is full, new writes overwrite the oldest unread snapshot (consumer may miss frames).
-    // - UI reads opportunistically; missed frames are acceptable.
-    // - Snapshot is immutable once published (writer writes slot fully, then advances write index).
-    //
-    // Indices are modulo kMeterRingCapacity.
-    static constexpr uint32_t kMeterRingCapacity = 128; // fixed, no allocations
-    std::array<MeterSnapshot, (size_t) kMeterRingCapacity> meterRing {};
-
-    // writeIndex: next slot the producer will publish.
-    // readIndex:  next slot the consumer will read (advanced by consumer; may be forced forward on overwrite).
-    // meterSeq:   publication signal (incremented by producer AFTER a snapshot is fully written and published).
-    std::atomic<uint32_t> meterWriteIndex { 0u };
-    mutable std::atomic<uint32_t> meterReadIndex  { 0u };
-    std::atomic<uint32_t> meterSeq        { 0u }; // wraparound OK
-
-    // Consumer-side tracking for readMeters(): updated only by UI thread.
-    // Atomic is used defensively; keep usage contained to metering plumbing only.
-    mutable std::atomic<uint32_t> meterLastReadSeq { 0u };
-
-    void publishMeters (const MeterSnapshot& s) noexcept;
-    bool readMeters (MeterSnapshot& out) const noexcept;
-
-    // Meter accumulators (double precision) — Step 3.1 (storage only; no meter math/publishing yet)
-    double inPeakHold[2]  = { 0.0, 0.0 };
-    double outPeakHold[2] = { 0.0, 0.0 };
-    double inRmsSq[2]     = { 0.0, 0.0 };
-    double outRmsSq[2]    = { 0.0, 0.0 };
-    double inTpHold[2]    = { 0.0, 0.0 };
-    double outTpHold[2]   = { 0.0, 0.0 };
-    double grHoldDb[2]    = { 0.0, 0.0 }; // attenuation magnitude in dB (0..+)
-
-    // Meter publish timing (members) — configured/used in later steps
-    int    meterPublishSamples = 0;
-    int    meterCountdown      = 0;
-    double meterDt             = 0.0;
-
-    // Loudness state (Phase 11): deterministic, bounded, allocation-free.
-    // Short-term is a fixed 3.0 s window implemented as 150 chunks at the meter cadence (~50 Hz).
-    // Integrated is a running mean-square accumulator.
-    static constexpr int kLufsHz          = 50;
-    static constexpr int kLufsShortSec    = 3;
-    static constexpr int kLufsShortChunks = kLufsHz * kLufsShortSec; // 150 (fixed, no allocations)
-
-    std::array<double, (size_t) kLufsShortChunks> lufsChunkE {};
-    uint32_t lufsChunkWrite  = 0u;
-    uint32_t lufsChunkFilled = 0u;
-    double   lufsShortSumE   = 0.0;
-
-    double   lufsCurChunkE   = 0.0;
-    int      lufsCurChunkN   = 0;
-
-    double   lufsIntSumE     = 0.0;
-    uint64_t lufsIntN        = 0u;
 
     // Gate-3 deterministic state model:
     void reset (double sampleRate, int maxBlock, int channels) noexcept;

@@ -49,7 +49,7 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
     currentGrLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
     currentGrLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
     currentGrLabel.setInterceptsMouseClicks (false, false);
-    currentGrLabel.setText ("0.0 dB", juce::dontSendNotification);
+    currentGrLabel.setText ("GR: 0.0 dB", juce::dontSendNotification);
     addAndMakeVisible (currentGrLabel);
 
     inTpLabel.setJustificationType (juce::Justification::centredLeft);
@@ -124,7 +124,7 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
     const float current = processor.getCurrentGRDb();
 
     grMeter.pushValueDb (current);
-    currentGrLabel.setText (juce::String::formatted ("%.1f dB", current), juce::dontSendNotification);
+    currentGrLabel.setText (juce::String::formatted ("GR: %.1f dB", current), juce::dontSendNotification);
 
     float inTp = -120.0f;
     float outTp = -120.0f;
@@ -212,32 +212,26 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
     b.removeFromTop (10);
 
     // Primary meter zone (Verification): GR bar + numeric, then truth readouts below.
-    const int grH     = 32;
-    const int colW    = 220;
-    const int padX    = 10;
-    const int rowH    = 18;
-    const int rowGap  = 6;
-    const int topGap  = 10;
+    grMeter.setBounds (b.removeFromTop (40));
 
-    const int truthH  = (rowH * 4) + (rowGap * 3);   // 4 rows: TP, LUFS, PEAK, CEILING
-    const int zoneH   = grH + topGap + truthH;
-
-    auto meterZone = b.removeFromTop (zoneH);
-
-    grMeter.setBounds (meterZone.removeFromTop (grH));
     auto m = grMeter.getBounds();
 
     // GR numeric (right side of the bar zone)
     currentGrLabel.setBounds (m.getRight() - 90, m.getY() + 6, 84, 18);
 
-    // Truth readouts grid (2-column, multi-row)
+    // Truth readouts grid (Bottom row concept, placed under the bar inside meter zone)
+    const int colW   = 220;
+    const int padX   = 10;
+    const int rowH   = 18;
+    const int rowGap = 6;
+
     const int leftX  = m.getX() + padX;
     const int rightX = m.getRight() - colW - padX;
 
-    const int y1 = meterZone.getY() + 6;             // Row 1
-    const int y2 = y1 + rowH + rowGap;               // Row 2
-    const int y3 = y2 + rowH + rowGap;               // Row 3
-    const int y4 = y3 + rowH + rowGap;               // Row 4 (Ceiling)
+    const int y1 = m.getY() + 50;                 // Row 1 start (below bar)
+    const int y2 = y1 + rowH + rowGap;            // Row 2
+    const int y3 = y2 + rowH + rowGap;            // Row 3
+    const int y4 = y3 + rowH + rowGap;            // Row 4 (Ceiling)
 
     // Row 1: IN/OUT TP
     inTpLabel.setBounds  (leftX,  y1, colW, rowH);
@@ -247,10 +241,10 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
     lufsSLabel.setBounds (leftX,  y2, colW, rowH);
     lufsILabel.setBounds (rightX, y2, colW, rowH);
 
-    // Row 3: IN/OUT PEAK
+    // Row 3 (optional utilities): IN/OUT PEAK
     inPeakLabel.setBounds  (leftX,  y3, colW, rowH);
     outPeakLabel.setBounds (rightX, y3, colW, rowH);
 
-    // Row 4: CEILING (full width)
+    // Tuck CEILING near the utilities (still numeric-only)
     ceilingLabel.setBounds (m.getX() + padX, y4, m.getWidth() - (2 * padX), rowH);
 }
