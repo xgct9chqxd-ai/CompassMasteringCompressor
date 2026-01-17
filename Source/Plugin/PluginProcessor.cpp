@@ -441,9 +441,52 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
     lastOutScalar[0] = gL;
     lastOutScalar[1] = gR;
 
-    if (numCh >= 1) chPtr[0][i] *= gL;
-    if (numCh >= 2) chPtr[1][i] *= gR;
-    for (int c = 2; c < numCh; ++c) chPtr[c][i] *= gR;
+    constexpr float kEpsAbs = 1.0e-12f;
+    float ceilingLin = (float) std::pow (10.0, ceilingDb / 20.0);
+    if (! std::isfinite ((double) ceilingLin) || ceilingLin <= 0.0f)
+        ceilingLin = 0.0f;
+
+    if (numCh >= 1)
+    {
+        float x = chPtr[0][i];
+        if (! std::isfinite ((double) x)) x = 0.0f;
+
+        const float a = std::abs (x);
+        const float gCeil = (a > kEpsAbs ? (ceilingLin / a) : 1.0e12f);
+        const float gApplied = (gL < gCeil ? gL : gCeil);
+
+        float y = x * gApplied;
+        if (! std::isfinite ((double) y)) y = 0.0f;
+        chPtr[0][i] = y;
+    }
+
+    if (numCh >= 2)
+    {
+        float x = chPtr[1][i];
+        if (! std::isfinite ((double) x)) x = 0.0f;
+
+        const float a = std::abs (x);
+        const float gCeil = (a > kEpsAbs ? (ceilingLin / a) : 1.0e12f);
+        const float gApplied = (gR < gCeil ? gR : gCeil);
+
+        float y = x * gApplied;
+        if (! std::isfinite ((double) y)) y = 0.0f;
+        chPtr[1][i] = y;
+    }
+
+    for (int c = 2; c < numCh; ++c)
+    {
+        float x = chPtr[c][i];
+        if (! std::isfinite ((double) x)) x = 0.0f;
+
+        const float a = std::abs (x);
+        const float gCeil = (a > kEpsAbs ? (ceilingLin / a) : 1.0e12f);
+        const float gApplied = (gR < gCeil ? gR : gCeil);
+
+        float y = x * gApplied;
+        if (! std::isfinite ((double) y)) y = 0.0f;
+        chPtr[c][i] = y;
+    }
 
     // Step 4 — Compute Output peak + RMS (broadband), linear domain (no dB).
     // Guard: accumulators are 2ch; never index beyond [0..1].
