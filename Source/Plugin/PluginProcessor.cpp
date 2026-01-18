@@ -623,12 +623,18 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
             yNext = juce::jmax (yNext, xT);
         }
 
-        // Phase 1.4 — GR output state slew limiting (dB domain, per-sample hard cap).
-        // Canonical enforcement (spec-binding):
-        // maxStepDb = 0.01
-        // ySlewed = yPrev + jlimit(-maxStepDb, +maxStepDb, (yNext - yPrev))
-        constexpr double maxStepDb = 0.01;
-        x1 = yPrev + juce::jlimit (-maxStepDb, +maxStepDb, (yNext - yPrev));
+        // Phase 1.4 — GR output state slew limiting (dB domain, time-consistent)
+        // These are the real sonic targets — tune these numbers by ear later
+        constexpr double maxAttackDbPerSec  = 18000.0;   // ~18,000 dB/s = very fast, catches most transients
+        constexpr double maxReleaseDbPerSec = 1800.0;    // 10× slower = musical recovery, no pumping
+
+        // Convert to per-sample limits using the actual time step (dt)
+        const double maxAttackDb  = maxAttackDbPerSec  * dt;
+        const double maxReleaseDb = maxReleaseDbPerSec * dt;
+
+        // Apply asymmetric slew
+        const double delta = yNext - yPrev;
+        x1 = yPrev + juce::jlimit (-maxReleaseDb, maxAttackDb, delta);
 
         // Downstream clamp(s) (existing) apply after enforcement.
         x1 = juce::jlimit (0.0, kMaxAttnDb, x1);
