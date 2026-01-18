@@ -398,14 +398,17 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
 
     std::array<double, 2> attnDbCh { 0.0, 0.0 };
 
-    // Spectral Guardrails: parallel measurement (no influence on envelope)
-    constexpr double kGuardFcHz   = 4500.0;
-    constexpr double kGuardTauSec = 0.040;
-    const double gGuardLp = std::exp (-2.0 * juce::MathConstants<double>::pi * kGuardFcHz * dt);
-    const double aGuardE  = onePoleAlpha (kGuardTauSec, dt);
+    // Spectral Guardrails (Phase 1.7): parallel HF measurement only (no influence on envelope)
+    // Pipeline (per channel):
+    // - 2nd-order Butterworth HPF @ 8 kHz on abs(s)
+    // - One-pole smoothing tau = 5 ms
+    // - Leaky integrator on squared smoothed output tau = 20 ms
+    constexpr double kGuardFcHz = 8000.0;
+    constexpr double kHfTauSec  = 0.005;
+    constexpr double kAccTauSec = 0.020;
 
     const int chProc = juce::jmin (2, numCh);
-    double guardrailHf01 = 0.0;
+    double hfEnergyStereo = 0.0;
 
     const bool overloadAssistOn = (overloadAssistBlocks > 0);
 
@@ -424,19 +427,51 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
 
         if (! overloadAssistOn)
         {
-            const double lp = gGuardLp * guardLpState[(size_t) c] + (1.0 - gGuardLp) * s;
-            guardLpState[(size_t) c] = lp;
-            const double hp = s - lp;
+            const double absS = std::abs (s);
 
-            const double s2  = s  * s;
-            const double hp2 = hp * hp;
+            const double fs = (dt > 0.0 ? (1.0 / dt) : 0.0);
+            const double w0 = 2.0 * juce::MathConstants<double>::pi * kGuardFcHz / juce::jmax (1.0, fs);
+            const double cw = std::cos (w0);
+            const double sw = std::sin (w0);
+            constexpr double Q = 0.7071067811865476; // Butterworth
+            const double alpha = sw / (2.0 * Q);
 
-            guardTotE[(size_t) c] = aGuardE * guardTotE[(size_t) c] + (1.0 - aGuardE) * s2;
-            guardHiE[(size_t) c]  = aGuardE * guardHiE[(size_t) c]  + (1.0 - aGuardE) * hp2;
+            const double b0 =  (1.0 + cw) * 0.5;
+            const double b1 = -(1.0 + cw);
+            const double b2 =  (1.0 + cw) * 0.5;
+            const double a0 =  (1.0 + alpha);
+            const double a1 = -(2.0 * cw);
+            const double a2 =  (1.0 - alpha);
 
-            const double denom = guardTotE[(size_t) c] + 1.0e-18;
-            const double hf = juce::jlimit (0.0, 1.0, guardHiE[(size_t) c] / denom);
-            if (hf > guardrailHf01) guardrailHf01 = hf;
+            const double nb0 = b0 / a0;
+            const double nb1 = b1 / a0;
+            const double nb2 = b2 / a0;
+            const double na1 = a1 / a0;
+            const double na2 = a2 / a0;
+
+            // DF2T biquad state: z1=guardLpState, z2=guardHpState2
+            double z1 = guardLpState[(size_t) c];
+            double z2 = guardHpState2[(size_t) c];
+
+            const double y = nb0 * absS + z1;
+            z1 = nb1 * absS - na1 * y + z2;
+            z2 = nb2 * absS - na2 * y;
+
+            guardLpState[(size_t) c]  = z1;
+            guardHpState2[(size_t) c] = z2;
+
+            const double aHf  = std::exp (-dt / kHfTauSec);
+            const double aAcc = std::exp (-dt / kAccTauSec);
+
+            // hfSmoothed (tau = 5 ms) stored in guardTotE
+            const double hfSm = aHf * guardTotE[(size_t) c] + (1.0 - aHf) * y;
+            guardTotE[(size_t) c] = hfSm;
+
+            // hfEnergy (tau = 20 ms) stored in guardHiE
+            const double e = aAcc * guardHiE[(size_t) c] + (1.0 - aAcc) * (hfSm * hfSm);
+            guardHiE[(size_t) c] = e;
+
+            if (e > hfEnergyStereo) hfEnergyStereo = e;
         }
 
         const double tpDb = 20.0 * std::log10 (std::abs (s) + kEpsLin);
@@ -606,11 +641,7 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
         attnDbCh[(size_t) c] = x1;
     }
 
-    if (numCh > 2)
-    {
-        for (int c = 2; c < numCh; ++c)
-            attnDbCh[1] = juce::jmax (attnDbCh[1], attnDbCh[0]);
-    }
+    // Note: detector/envelope is 2ch; additional channels are not part of the attenuation-link computation.
 
     const double linkedDb = juce::jmax (attnDbCh[0], attnDbCh[1]);
     const double outDbL0 = (1.0 - link01) * attnDbCh[0] + link01 * linkedDb;
@@ -619,23 +650,32 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
     double outDbL = outDbL0;
     double outDbR = outDbR0;
     {
+        auto smoothstep = [] (double x) noexcept -> double
+        {
+            x = juce::jlimit (0.0, 1.0, x);
+            return (3.0 * x * x) - (2.0 * x * x * x);
+        };
+
+        // HF stress -> grScalar mapping (Phase 1.7)
+        const double hfStress = 10.0 * std::log10 (hfEnergyStereo + 1.0e-12);
+        const double stressNorm = juce::jlimit (0.0, 1.0, (hfStress - (-30.0)) / 30.0);
+        double grScalar = 1.0 - 0.25 * smoothstep (stressNorm);
+        grScalar = juce::jlimit (0.75, 1.0, grScalar);
+
+        // Level-dependent activation via GR average (Phase 1.7)
         const double grAbsDb = juce::jmax (outDbL, outDbR);
+        const double aGr = std::exp (-dt / 0.050);
+        guardGrAvgDb = aGr * guardGrAvgDb + (1.0 - aGr) * grAbsDb;
 
-        constexpr double kGuardOnDb       = 3.0;
-        constexpr double kGuardFullDb     = 12.0;
-        constexpr double kGuardMaxExtraDb = 1.2;
+        const double t = juce::jlimit (0.0, 1.0, (guardGrAvgDb - 6.0) / 12.0);
+        const double activation = smoothstep (t);
 
-        double t = 0.0;
-        if (grAbsDb > kGuardOnDb)
-            t = juce::jlimit (0.0, 1.0, (grAbsDb - kGuardOnDb) / (kGuardFullDb - kGuardOnDb));
+        double finalScalar = 1.0 - activation * (1.0 - grScalar);
+        finalScalar = juce::jlimit (0.75, 1.0, finalScalar);
 
-        const double tSmooth = t * t * (3.0 - 2.0 * t);
-
-        const double hf01 = juce::jlimit (0.0, 1.0, guardrailHf01);
-        const double guardDb = juce::jlimit (0.0, kGuardMaxExtraDb, tSmooth * hf01 * kGuardMaxExtraDb);
-
-        outDbL += guardDb;
-        outDbR += guardDb;
+        // Final application (hard-fenced): broadband scaling of post-link GR only
+        outDbL *= finalScalar;
+        outDbR *= finalScalar;
     }
 
     outDbL = juce::jlimit (0.0, kMaxAttnDb, outDbL);

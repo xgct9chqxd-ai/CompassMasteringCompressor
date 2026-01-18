@@ -356,9 +356,13 @@ private:
     // - frequency-selective measurement allowed
     // - must not influence detector/envelope timing/shape
     // - may only add subtle broadband GR under heavy limiting
-    std::array<double, 2> guardLpState { 0.0, 0.0 }; // one-pole LP state for split
-    std::array<double, 2> guardTotE   { 0.0, 0.0 }; // total energy EMA
-    std::array<double, 2> guardHiE    { 0.0, 0.0 }; // high-band energy EMA
+    std::array<double, 2> guardLpState  { 0.0, 0.0 }; // one-pole LP state for split
+    std::array<double, 2> guardHpState2 { 0.0, 0.0 }; // reserved state slot (2ch contract)
+    std::array<double, 2> guardTotE    { 0.0, 0.0 }; // total energy EMA
+    std::array<double, 2> guardHiE     { 0.0, 0.0 }; // high-band energy EMA
+
+    // GR average (Phase 1.7 activation): 50 ms one-pole EMA of grAbsDb (global, not per-channel)
+    double guardGrAvgDb = 0.0;
 
     // Scratch buffer for oversampled measurement (double precision)
     juce::AudioBuffer<float> workBufferFloat;
