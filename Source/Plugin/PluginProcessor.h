@@ -339,9 +339,16 @@ private:
     std::array<double, 2> macroEnergyState   { 0.0, 0.0 };
 
     // Gate: Adaptive Release inputs (deterministic, bounded, continuous)
-    // - Crest factor proxy: short RMS energy accumulator (per-channel)
+    // - Crest factor proxy: 50 ms rectangular moving-average RMS^2 ring (SR_max=192 kHz => N_max=9600)
     // - Event density: continuous "event presence" accumulator (per-channel)
-    std::array<double, 2> crestRmsSqState    { 0.0, 0.0 };
+    static constexpr int kCrestRmsWinMaxN = 9600; // ceil(0.050 * 192000) = 9600
+    double rmsSqRing[2][kCrestRmsWinMaxN] {};
+    double rmsSqSum[2] { 0.0, 0.0 };
+    int    rmsWriteIdx[2] { 0, 0 };
+    int    rmsWinN = 1; // runtime: ceil(0.050*sampleRate), clamped to [1, kCrestRmsWinMaxN]
+    int    rmsSilenceCount[2] { 0, 0 };
+    int    rmsSilenceResetN = 1; // runtime: ceil(0.100*sampleRate)
+    bool   invalidConfig = false; // set true if sampleRate > 192000.0
     std::array<double, 2> eventDensityState  { 0.0, 0.0 };
 
     // Spectral Guardrails (measurement-only; broadband application)

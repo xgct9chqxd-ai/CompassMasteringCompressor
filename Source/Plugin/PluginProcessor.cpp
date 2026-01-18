@@ -161,7 +161,30 @@ void CompassMasteringLimiterAudioProcessor::reset (double sampleRate, int maxBlo
     guardLpState = { 0.0, 0.0 };
     guardTotE    = { 0.0, 0.0 };
     guardHiE     = { 0.0, 0.0 };
-    crestRmsSqState    = { 0.0, 0.0 };
+
+    // Phase 1.4 — Crest Factor RMS Window (50 ms rectangular MA) + SR_max enforcement
+    invalidConfig = (sampleRate > 192000.0);
+
+    rmsWinN = (int) std::ceil (0.050 * sampleRate);
+    if (rmsWinN < 1) rmsWinN = 1;
+    if (rmsWinN > kCrestRmsWinMaxN) rmsWinN = kCrestRmsWinMaxN;
+
+    rmsSilenceResetN = (int) std::ceil (0.100 * sampleRate);
+    if (rmsSilenceResetN < 1) rmsSilenceResetN = 1;
+
+   #if JUCE_DEBUG
+    jassert (rmsWinN <= kCrestRmsWinMaxN);
+   #endif
+
+    for (int c = 0; c < 2; ++c)
+    {
+        rmsSqSum[c] = 0.0;
+        rmsWriteIdx[c] = 0;
+        rmsSilenceCount[c] = 0;
+        for (int i = 0; i < kCrestRmsWinMaxN; ++i)
+            rmsSqRing[c][i] = 0.0;
+    }
+
     eventDensityState  = { 0.0, 0.0 };
 
     lastOutScalar = { 1.0f, 1.0f };
@@ -455,14 +478,47 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
         const double macro01 = macroEnergyState[(size_t) c] / (1.0 + macroEnergyState[(size_t) c]);
         const double sustained01 = juce::jlimit (0.0, 1.0, macro01);
 
-        constexpr double kCrestRmsSecBase = 0.050;
-        const double crestRmsSec = kCrestRmsSecBase * (1.15 - 0.30 * bias01);
-        const double aCR = onePoleAlpha (crestRmsSec, dt);
+        // Phase 1.4 — Crest Factor RMS Window (50 ms rectangular MA) + Crest statistic binding
         const double absS = std::abs (s);
-        crestRmsSqState[(size_t) c] = aCR * crestRmsSqState[(size_t) c] + (1.0 - aCR) * (absS * absS);
-        const double rmsLin = std::sqrt (juce::jmax (0.0, crestRmsSqState[(size_t) c]));
-        const double crest = absS / (rmsLin + 1.0e-12);
-        const double crest01 = juce::jlimit (0.0, 1.0, (crest - 1.0) / (crest + 1.0));
+
+        // Deterministic silence reset (100 ms): counter increments when tpDb < -90 dB.
+        if (tpDb < -90.0)
+            ++rmsSilenceCount[(size_t) c];
+        else
+            rmsSilenceCount[(size_t) c] = 0;
+
+        if (rmsSilenceCount[(size_t) c] >= rmsSilenceResetN)
+        {
+            for (int cc = 0; cc < 2; ++cc)
+            {
+                rmsSqSum[cc] = 0.0;
+                rmsWriteIdx[cc] = 0;
+                rmsSilenceCount[cc] = 0;
+                for (int i = 0; i < kCrestRmsWinMaxN; ++i)
+                    rmsSqRing[cc][i] = 0.0;
+            }
+        }
+
+        const double newSq = absS * absS;
+        const int idx = rmsWriteIdx[(size_t) c];
+        const double oldSq = rmsSqRing[(size_t) c][idx];
+
+        rmsSqRing[(size_t) c][idx] = newSq;
+        rmsSqSum[(size_t) c] += (newSq - oldSq);
+
+        int nextIdx = idx + 1;
+        if (nextIdx >= rmsWinN) nextIdx = 0;
+        rmsWriteIdx[(size_t) c] = nextIdx;
+
+        rmsSqSum[(size_t) c] = juce::jmax (0.0, rmsSqSum[(size_t) c]);
+
+        const double rmsLin = std::sqrt (rmsSqSum[(size_t) c] / (double) rmsWinN);
+
+        constexpr double eps = 1.0e-12;
+        const double rmsDb = 20.0 * std::log10 (rmsLin + eps);
+        const double crestDb = tpDb - rmsDb;
+
+        const double w_cf = juce::jlimit (0.0, 1.0, (crestDb - 6.0) / 18.0);
 
         constexpr double kDensitySecBase = 0.090;
         const double densitySec = kDensitySecBase * (1.20 - 0.40 * bias01);
@@ -478,7 +534,7 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
             (0.60 + 0.20 * (1.0 - bias01)) * sustained01 +
             (0.40 - 0.20 * (1.0 - bias01)) * density01);
 
-        const double snap01 = crest01;
+        const double snap01 = w_cf;
 
         const double resp01 = juce::jlimit (0.0, 1.0,
             (0.45 + 0.35 * bias01) * snap01 +
@@ -754,6 +810,8 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
     jassert (std::isfinite (microStage1DbState[0]) && std::isfinite (microStage1DbState[1]));
     jassert (std::isfinite (microStage2DbState[0]) && std::isfinite (microStage2DbState[1]));
     jassert (std::isfinite (macroEnergyState[0])   && std::isfinite (macroEnergyState[1]));
+    jassert (rmsWinN <= kCrestRmsWinMaxN);
+    jassert (rmsSqSum[0] >= -1.0e-9 && rmsSqSum[1] >= -1.0e-9);
    #endif
 
     // Release containment: sanitize any bad carried state immediately (prevents propagation)
@@ -766,7 +824,14 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
         microStage1DbState = { 0.0, 0.0 };
         microStage2DbState = { 0.0, 0.0 };
         macroEnergyState   = { 0.0, 0.0 };
-        crestRmsSqState    = { 0.0, 0.0 };
+        for (int c = 0; c < 2; ++c)
+        {
+            rmsSqSum[c] = 0.0;
+            rmsWriteIdx[c] = 0;
+            rmsSilenceCount[c] = 0;
+            for (int i = 0; i < kCrestRmsWinMaxN; ++i)
+                rmsSqRing[c][i] = 0.0;
+        }
         eventDensityState  = { 0.0, 0.0 };
         guardLpState       = { 0.0, 0.0 };
         guardTotE          = { 0.0, 0.0 };
@@ -1233,7 +1298,14 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
         microStage1DbState = { 0.0, 0.0 };
         microStage2DbState = { 0.0, 0.0 };
         macroEnergyState   = { 0.0, 0.0 };
-        crestRmsSqState    = { 0.0, 0.0 };
+        for (int c = 0; c < 2; ++c)
+        {
+            rmsSqSum[c] = 0.0;
+            rmsWriteIdx[c] = 0;
+            rmsSilenceCount[c] = 0;
+            for (int i = 0; i < kCrestRmsWinMaxN; ++i)
+                rmsSqRing[c][i] = 0.0;
+        }
         eventDensityState  = { 0.0, 0.0 };
         guardLpState       = { 0.0, 0.0 };
         guardTotE          = { 0.0, 0.0 };
