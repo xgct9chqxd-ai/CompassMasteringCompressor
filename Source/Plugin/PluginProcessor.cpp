@@ -1169,107 +1169,129 @@ void CompassMasteringLimiterAudioProcessor::measureTruePeak (const juce::AudioBu
 {
     truePeakLin = 0.0;
 
-    if (activeOversampler == nullptr)
-        return;
-
-    const int ch = juce::jmin (workBufferFloat.getNumChannels(), buffer.getNumChannels());
-    const int n  = juce::jmin (workBufferFloat.getNumSamples(),  buffer.getNumSamples());
+    const int ch = juce::jmin (2, buffer.getNumChannels());
+    const int n  = buffer.getNumSamples();
     if (ch <= 0 || n <= 0)
         return;
 
-    // If input is effectively silent, reset oversampler state to prevent denormal accumulation
-
-
+    // If input is effectively silent, reset FIR history to prevent denormal accumulation
     // in FIR filter history (common crackle source under heavy attenuation / silence).
-
-
     constexpr float kSilenceLin = 1.0e-8f;
 
-
     float inPeak = 0.0f;
-
-
     for (int c = 0; c < ch; ++c)
-
-
     {
-
-
         const float* src = buffer.getReadPointer (c);
-
-
         for (int i = 0; i < n; ++i)
-
-
         {
-
-
             const float a = std::abs (src[i]);
-
-
             if (a > inPeak) inPeak = a;
-
-
         }
-
-
     }
-
 
     if (inPeak < kSilenceLin)
-
-
     {
-
-
         truePeakLin = 0.0;
 
+        // Phase 1.2 Step 5 — silence soak (decay-only, no FIR work):
+        // Preserve detector-owned sustained energy as a deterministic decay across this silent block,
+        // while still clearing FIR/transient history to prevent denormal accumulation.
+        const double dtDet = lastInvSampleRate / (double) kTpOSFactor;
+        const double aS    = onePoleAlpha (kTpSustainedTauSec, dtDet);
+        const int    nDet  = n * kTpOSFactor;
+        const double aBlk  = std::pow (aS, (double) nDet);
 
-        activeOversampler->reset();
+        std::array<double, 2> eKeep { 0.0, 0.0 };
+        for (int c = 0; c < 2; ++c)
+        {
+            double e = tpSustainedPowEma[(size_t) c];
+            if (! std::isfinite (e) || e < 0.0) e = 0.0;
+            eKeep[(size_t) c] = e * aBlk;
+        }
 
+        resetTruePeakDetector();
+
+        for (int c = 0; c < 2; ++c)
+            tpSustainedPowEma[(size_t) c] = eKeep[(size_t) c];
 
         return;
-
-
     }
 
+    double tpCh[2] = { 0.0, 0.0 };
 
+    // Phase 1.2 — Sustained energy accumulator (detector domain):
+    // Update cadence: per reconstructed sample (4x).
+    const double dtDet = lastInvSampleRate / (double) kTpOSFactor;
+    const double aS    = onePoleAlpha (kTpSustainedTauSec, dtDet);
 
-    // Convert input to double for oversampled reconstruction.
+    // Polyphase FIR reconstruction (4x):
+    // y[n*L + p] = sum_k h[p + L*k] * x[n - k]
     for (int c = 0; c < ch; ++c)
     {
+        int pos = tpHistPos[(size_t) c];
         const float* src = buffer.getReadPointer (c);
-        float* dst = workBufferFloat.getWritePointer (c);
+
+        double localPeak = 0.0;
+
         for (int i = 0; i < n; ++i)
-            dst[i] = src[i];
-    }
-
-    juce::dsp::AudioBlock<float> block (workBufferFloat);
-
-    juce::ScopedNoDenormals innerNoDenormals; // extra guard for oversampler internals
-    auto osBlock = activeOversampler->processSamplesUp (block);
-
-    const int osCh = (int) osBlock.getNumChannels();
-    const int osN  = (int) osBlock.getNumSamples();
-
-    for (int c = 0; c < osCh; ++c)
-    {
-        auto* p = osBlock.getChannelPointer ((size_t) c);
-        for (int i = 0; i < osN; ++i)
         {
-            const double a = std::abs (p[i]);
-            if (a > truePeakLin)
-                truePeakLin = a;
+            const double x = (double) src[i];
+
+            tpHist[(size_t) c][(size_t) pos] = x;
+            pos = (pos + 1) % kTpTaps;
+
+            const int newest = pos - 1;
+
+            for (int p = 0; p < kTpOSFactor; ++p)
+            {
+                double acc = 0.0;
+                int k = 0;
+
+                for (int t = p; t < kTpTaps; t += kTpOSFactor)
+                {
+                    int idx = newest - k;
+                    if (idx < 0) idx += kTpTaps;
+
+                    acc += kTpFIR[(size_t) t] * tpHist[(size_t) c][(size_t) idx];
+                    ++k;
+                }
+
+                // Sustained energy (broadband power EMA), deterministic + stable:
+                // finite containment only; no hot-loop clamps.
+                const double accSafe = (std::isfinite (acc) ? acc : 0.0);
+                const double pwr = accSafe * accSafe;
+                tpSustainedPowEma[(size_t) c] = aS * tpSustainedPowEma[(size_t) c] + (1.0 - aS) * pwr;
+
+                const double a = std::abs (accSafe);
+                if (a > localPeak)
+                    localPeak = a;
+            }
         }
+
+        tpHistPos[(size_t) c] = pos;
+
+        tpCh[c] = localPeak;
+
+        // Phase 1.2 Step 3 — transient event derivative (detector domain):
+        // First-order temporal derivative of peak magnitude (rising edge only).
+        tpDerivLin[(size_t) c] = tpCh[c] - prevTpChLin[(size_t) c];
+        if (tpDerivLin[(size_t) c] < 0.0)
+            tpDerivLin[(size_t) c] = 0.0;
+        prevTpChLin[(size_t) c] = tpCh[c];
+
+        // Meter accumulator storage (input true peak hold, linear).
+        if (tpCh[c] > inTpHold[c])
+            inTpHold[c] = tpCh[c];
     }
 
-    // No downsampling/audio-path processing yet (skeleton is pass-through).
+    // Preserve existing scalar: max across channels.
+    truePeakLin = tpCh[0];
+    if (tpCh[1] > truePeakLin)
+        truePeakLin = tpCh[1];
 
-    // Diagnostic only: if near-silence, reset oversampler state to rule out denormal accumulation.
+    // Diagnostic-only safety: if near-silence, reset FIR history to rule out denormal accumulation.
     if (truePeakLin < 1.0e-5)
-        activeOversampler->reset();
-
-    // NOTE: Do not reset per block in normal operation; true-peak reconstruction must be continuous across blocks.
+        resetTruePeakDetector();
 }
 
 juce::AudioProcessorEditor* CompassMasteringLimiterAudioProcessor::createEditor()

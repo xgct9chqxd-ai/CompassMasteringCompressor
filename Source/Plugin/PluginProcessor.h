@@ -236,6 +236,75 @@ private:
     // Control-domain true peak (linear)
     double truePeakLin = 0.0;
 
+    // Phase 1.2 — True-Peak Detector Path (Reference)
+    // Polyphase FIR oversampled reconstruction (linear-phase, deterministic coefficients).
+    // Implemented as 4x interpolation; coefficients are symmetric (linear-phase) and normalized so sum(h) == 4.0.
+    static constexpr int kTpOSFactor = 4;
+    static constexpr int kTpTaps     = 32; // must be even and divisible by kTpOSFactor
+
+    static constexpr std::array<double, kTpTaps> kTpFIR {
+        -0.000000000000000000e+00,
+        -8.291365655703771638e-04,
+        -3.525756966746731828e-03,
+        -3.488316484777266926e-03,
+         6.579729475753049242e-03,
+         2.634752184268256830e-02,
+         4.035166818965605501e-02,
+         2.428673766138198312e-02,
+        -3.407969929110992585e-02,
+        -1.130051644440947245e-01,
+        -1.538132119698306655e-01,
+        -8.715260485310091787e-02,
+         1.222467629501392816e-01,
+         4.403366958529203457e-01,
+         7.651370491704410082e-01,
+         9.706077254322565961e-01,
+         9.706077254322565961e-01,
+         7.651370491704410082e-01,
+         4.403366958529203457e-01,
+         1.222467629501392955e-01,
+        -8.715260485310093175e-02,
+        -1.538132119698306377e-01,
+        -1.130051644440948078e-01,
+        -3.407969929110995361e-02,
+         2.428673766138198312e-02,
+         4.035166818965605501e-02,
+         2.634752184268256830e-02,
+         6.579729475753050977e-03,
+        -3.488316484777266926e-03,
+        -3.525756966746731828e-03,
+        -8.291365655703861626e-04,
+        -0.000000000000000000e+00
+    };
+
+    // Per-channel FIR history (preallocated; 2-channel accumulator contract).
+    std::array<std::array<double, kTpTaps>, 2> tpHist{};
+    std::array<int, 2> tpHistPos{};
+
+    // Detector-domain transient feature:
+    // First-order temporal derivative of peak magnitude (linear), per channel, per block.
+    std::array<double, 2> prevTpChLin { 0.0, 0.0 };
+    std::array<double, 2> tpDerivLin  { 0.0, 0.0 };
+
+    // Phase 1.2 — Sustained energy accumulator (detector domain):
+    // Broadband power EMA of reconstructed samples (double), per channel.
+    // Decay law is locked: a = exp(-dt/tau) via onePoleAlpha(tau, dt).
+    static constexpr double kTpSustainedTauSec = 0.040;
+    std::array<double, 2> tpSustainedPowEma { 0.0, 0.0 };
+
+    void resetTruePeakDetector() noexcept
+    {
+        for (int c = 0; c < 2; ++c)
+        {
+            tpHist[(size_t) c].fill (0.0);
+            tpHistPos[(size_t) c] = 0;
+
+            prevTpChLin[(size_t) c] = 0.0;
+            tpDerivLin[(size_t) c]  = 0.0;
+            tpSustainedPowEma[(size_t) c] = 0.0;
+        }
+    }
+
     // UI meter readout (GR in dB, negative: 0..-60). Published once per block (atomic, lock-free).
     std::atomic<float> grDbForUI { 0.0f };
 
