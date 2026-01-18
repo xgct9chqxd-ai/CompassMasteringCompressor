@@ -100,6 +100,10 @@ public:
         return (float) juce::jlimit (-120.0f, 60.0f, v);
     }
 
+    // Phase 1.4 — deterministic probes (non-realtime; callable from tests/debug harness)
+    double probeSettleTimeSec (double sampleRate) const noexcept;
+    bool probeContinuityFastAutomation (double sampleRate, double& outMaxAbsDeltaDb) const noexcept;
+
 private:
     static APVTS::ParameterLayout createParameterLayout();
 

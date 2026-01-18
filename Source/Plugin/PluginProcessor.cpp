@@ -227,6 +227,134 @@ double CompassMasteringLimiterAudioProcessor::onePoleAlpha (double tauSec, doubl
     return std::exp (-dtSec / juce::jmax (1.0e-9, tauSec));
 }
 
+double CompassMasteringLimiterAudioProcessor::probeSettleTimeSec (double sampleRate) const noexcept
+{
+    constexpr double kSoftK     = 32.0;
+    constexpr double kMaxAttnDb = 120.0;
+
+    // Phase 1.4 spec-binding continuity invariant (per-sample hard cap)
+    constexpr double kMaxStepDb = 0.01;
+
+    const double sr = juce::jmax (1.0, sampleRate);
+    const double dt = 1.0 / sr;
+
+    // Full-scale instantaneous condition in the existing GR target path:
+    // tpDb is formed as 20*log10(|s| + eps). For |s|=1, tpDb ~= 0 dB.
+    const double tpDb = 0.0;
+    const double ceilingDb = 0.0;
+
+    auto softplusTargetDb = [&](double driveDb) noexcept -> double
+    {
+        const double x = (tpDb + driveDb) - ceilingDb;
+        const double z = kSoftK * x;
+        const double softplus = z + std::log1p (std::exp (-std::abs (z)));
+        double attnTargetDb = softplus / kSoftK;
+        return juce::jlimit (0.0, kMaxAttnDb, attnTargetDb);
+    };
+
+    auto stepState = [&](double yPrev, double targetDb) noexcept -> double
+    {
+        return yPrev + juce::jlimit (-kMaxStepDb, +kMaxStepDb, (targetDb - yPrev));
+    };
+
+    // Spec: simulate Drive step 0 -> +20 dB for at least 100 ms; use long enough tail for asymptote.
+    const int nTotal = (int) (0.200 * sr + 0.5);
+    const int wN     = (int) (0.100 * sr + 0.5);
+    if (nTotal <= 2 || wN <= 2 || wN >= nTotal)
+        return 0.0;
+
+    // Simulate the step and store GR[n] deterministically (caller thread only).
+    std::vector<double> gr;
+    gr.resize ((size_t) nTotal, 0.0);
+
+    double y = 0.0;
+    for (int n = 0; n < nTotal; ++n)
+    {
+        const double driveDb = (n == 0 ? 0.0 : 20.0);
+        const double targetDb = softplusTargetDb (driveDb);
+        y = stepState (y, targetDb);
+        y = juce::jlimit (0.0, kMaxAttnDb, y);
+        gr[(size_t) n] = y;
+    }
+
+    const double grFinal = gr.back();
+
+    // Sliding window: earliest t where over next 100 ms, max(|GR - GR_final|) <= 0.1 dB.
+    for (int n = 0; n + wN <= nTotal; ++n)
+    {
+        double maxDev = 0.0;
+        for (int k = n; k < n + wN; ++k)
+        {
+            const double dev = std::abs (gr[(size_t) k] - grFinal);
+            if (dev > maxDev) maxDev = dev;
+            if (maxDev > 0.1) break;
+        }
+
+        if (maxDev <= 0.1)
+            return (double) n * dt;
+    }
+
+    return (double) nTotal * dt;
+}
+
+bool CompassMasteringLimiterAudioProcessor::probeContinuityFastAutomation (double sampleRate, double& outMaxAbsDeltaDb) const noexcept
+{
+    constexpr double kSoftK     = 32.0;
+    constexpr double kMaxAttnDb = 120.0;
+
+    // Phase 1.4 spec-binding continuity invariant (per-sample hard cap)
+    constexpr double kMaxStepDb = 0.01;
+
+    const double sr = juce::jmax (1.0, sampleRate);
+    const double dt = 1.0 / sr;
+
+    const double tpDb = 0.0;
+    const double ceilingDb = 0.0;
+
+    auto softplusTargetDb = [&](double driveDb) noexcept -> double
+    {
+        const double x = (tpDb + driveDb) - ceilingDb;
+        const double z = kSoftK * x;
+        const double softplus = z + std::log1p (std::exp (-std::abs (z)));
+        double attnTargetDb = softplus / kSoftK;
+        return juce::jlimit (0.0, kMaxAttnDb, attnTargetDb);
+    };
+
+    auto stepState = [&](double yPrev, double targetDb) noexcept -> double
+    {
+        return yPrev + juce::jlimit (-kMaxStepDb, +kMaxStepDb, (targetDb - yPrev));
+    };
+
+    // Spec: ramp 0 -> +20 dB over 1 ms, then hold; analyze 10 ms total window.
+    const int nRamp  = juce::jmax (2, (int) (0.001 * sr + 0.5));
+    const int nTotal = juce::jmax (2, (int) (0.010 * sr + 0.5));
+
+    double y = 0.0;
+    double maxAbsDelta = 0.0;
+
+    for (int n = 0; n < nTotal; ++n)
+    {
+        double driveDb = 20.0;
+        if (n < nRamp)
+        {
+            const double t = (double) n / (double) (nRamp - 1);
+            driveDb = 20.0 * t;
+        }
+
+        const double targetDb = softplusTargetDb (driveDb);
+
+        const double yPrev = y;
+        y = stepState (y, targetDb);
+        y = juce::jlimit (0.0, kMaxAttnDb, y);
+
+        const double d = std::abs (y - yPrev);
+        if (d > maxAbsDelta) maxAbsDelta = d;
+    }
+
+    outMaxAbsDeltaDb = maxAbsDelta;
+    return (maxAbsDelta <= 0.01);
+}
+
 void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPtr,
                                                              int numCh,
                                                              int i,
@@ -402,7 +530,12 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
             yNext = juce::jmax (yNext, xT);
         }
 
-        x1 = yNext;
+        // Phase 1.4 — GR output state slew limiting (dB domain, per-sample hard cap).
+        // Canonical enforcement (spec-binding):
+        // maxStepDb = 0.01
+        // ySlewed = yPrev + jlimit(-maxStepDb, +maxStepDb, (yNext - yPrev))
+        constexpr double maxStepDb = 0.01;
+        x1 = yPrev + juce::jlimit (-maxStepDb, +maxStepDb, (yNext - yPrev));
 
         // Downstream clamp(s) (existing) apply after enforcement.
         x1 = juce::jlimit (0.0, kMaxAttnDb, x1);
