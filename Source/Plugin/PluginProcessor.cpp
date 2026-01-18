@@ -906,6 +906,19 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
         }
     }
 
+    // Offline/nonrealtime transition is a transport-safe boundary for oversampling selection + latency.
+    const bool nonRealtimeNow = isNonRealtime();
+    if (nonRealtimeNow != lastNonRealtime)
+    {
+        lastNonRealtime = nonRealtimeNow;
+
+        const int ch = juce::jmax (getTotalNumInputChannels(), getTotalNumOutputChannels());
+        reset (lastSampleRate, lastMaxBlock, ch);
+
+        const int osMinIndexBoundary = (int) apvts->getRawParameterValue ("oversampling_min")->load();
+        selectOversamplingAtBoundary (osMinIndexBoundary);
+    }
+
     // Gate-2 rule: read params once per block into locals (atomics -> locals).
     const float driveDbTarget   = apvts->getRawParameterValue ("drive")->load();
     const float ceilingDbTarget = apvts->getRawParameterValue ("ceiling")->load();

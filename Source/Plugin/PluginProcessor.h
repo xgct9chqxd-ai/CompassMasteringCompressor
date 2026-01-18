@@ -230,6 +230,9 @@ private:
     bool transportKnown = false;
     bool lastTransportPlaying = false;
 
+    // Offline/nonrealtime edge detection (transition triggers boundary semantics):
+    bool lastNonRealtime = false;
+
     // Oversampling (prebuilt instances; selected at transport-safe boundary only)
     static constexpr int kOsCount = 3; // 2x / 4x / 8x
     std::array<std::unique_ptr<juce::dsp::Oversampling<float>>, kOsCount> oversamplers;
