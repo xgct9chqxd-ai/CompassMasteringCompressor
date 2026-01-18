@@ -318,6 +318,12 @@ private:
 
     // Output scalar continuity (tiny, deterministic) — prevents micro-steps reaching the output
     std::array<float, 2> lastOutScalar { 1.0f, 1.0f };
+
+    // Phase 1.9 — Bypass crossfade (sample-accurate, no resets on bypass edges)
+    float bypassMix = 1.0f; // 1=wet, 0=dry
+
+    // Phase 1.9 — Silence-horizon bounded memory (per-channel sample counter)
+    std::array<int, 2> silenceCountSamples { 0, 0 };
     // Guards + Safety Rails (Gate-10):
     // - Hard bounds: attenuation depth already clamped via kMaxAttnDb in processBlock
     // - Slew limiting: prevents extreme step changes from bad automation or math glitches

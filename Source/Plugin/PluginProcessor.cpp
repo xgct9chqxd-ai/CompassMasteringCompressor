@@ -476,6 +476,31 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
 
         const double tpDb = 20.0 * std::log10 (std::abs (s) + kEpsLin);
 
+        // Phase 1.9 — Silence-horizon reset (0.5 s): bounded adaptive memory under sustained silence.
+        {
+            const double fs = (dt > 0.0 ? (1.0 / dt) : 0.0);
+            const int silenceSamplesRequired = (int) std::ceil (0.5 * juce::jmax (1.0, fs));
+
+            if (tpDb < -90.0)
+                ++silenceCountSamples[(size_t) c];
+            else
+                silenceCountSamples[(size_t) c] = 0;
+
+            if (silenceCountSamples[(size_t) c] >= silenceSamplesRequired)
+            {
+                microStage1DbState[(size_t) c] = 0.0;
+                microStage2DbState[(size_t) c] = 0.0;
+                macroEnergyState[(size_t) c]   = 0.0;
+                eventDensityState[(size_t) c]  = 0.0;
+
+                guardLpState[(size_t) c]       = 0.0;
+                guardTotE[(size_t) c]          = 0.0;
+                guardHiE[(size_t) c]           = 0.0;
+
+                silenceCountSamples[(size_t) c] = 0;
+            }
+        }
+
         const double x = (tpDb + driveDb) - ceilingDb;
 
         const double z = kSoftK * x;
@@ -919,6 +944,19 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
         selectOversamplingAtBoundary (osMinIndexBoundary);
     }
 
+    // Phase 1.9 — Bypass crossfade target (wet keeps computing even when bypassed).
+    const auto* bp = getBypassParameter();
+    const bool bypassedNow = (bp != nullptr) && (bp->getValue() >= 0.5f);
+    const float bypassTarget = (bypassedNow ? 0.0f : 1.0f);
+    auto stepBypassMix = [&] () noexcept
+    {
+        constexpr float maxDelta = 0.01f;
+        const float d = bypassTarget - bypassMix;
+        const float step = juce::jlimit (-maxDelta, +maxDelta, d);
+        bypassMix += step;
+        bypassMix = juce::jlimit (0.0f, 1.0f, bypassMix);
+    };
+
     // Gate-2 rule: read params once per block into locals (atomics -> locals).
     const float driveDbTarget   = apvts->getRawParameterValue ("drive")->load();
     const float ceilingDbTarget = apvts->getRawParameterValue ("ceiling")->load();
@@ -1098,13 +1136,18 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
 
             activeOversampler->processSamplesDown (blockN);
 
-            // Copy double -> float output (native-rate)
+            // Copy wet -> output with Phase 1.9 bypass crossfade (dry = input buffer).
             for (int c = 0; c < numCh; ++c)
             {
-                const float* src = workBufferFloat.getReadPointer (c);
-                float* dst = buffer.getWritePointer (c);
+                const float* src = workBufferFloat.getReadPointer (c); // wet
+                float* dst = buffer.getWritePointer (c);              // contains dry until we overwrite
                 for (int i = 0; i < n; ++i)
-                    dst[i] = (float) src[i];
+                {
+                    stepBypassMix();
+                    const float dry = dst[i];
+                    const float wet = src[i];
+                    dst[i] = bypassMix * wet + (1.0f - bypassMix) * dry;
+                }
             }
             }
             else
@@ -1114,6 +1157,10 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
                 ceilingDbSmoothed.skip (n);
                 adaptiveBias01Smoothed.skip (n);
                 stereoLink01Smoothed.skip (n);
+
+                // Deterministic bypass ramp advancement (native-rate length n), even when skipping audio-path work.
+                for (int i = 0; i < n; ++i)
+                    stepBypassMix();
 
                 grDbForUI.store (0.0f, std::memory_order_relaxed);
             }
@@ -1141,10 +1188,18 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
 
             for (int i = 0; i < n; ++i)
             {
+                stepBypassMix();
+
                 const double driveDb   = (double) driveDbSmoothed.getNextValue();
                 const double ceilingDb = (double) ceilingDbSmoothed.getNextValue();
                 const double bias01    = juce::jlimit (0.0, 1.0, (double) adaptiveBias01Smoothed.getNextValue());
                 const double link01    = juce::jlimit (0.0, 1.0, (double) stereoLink01Smoothed.getNextValue());
+
+                constexpr int kChCacheMax = 8;
+                std::array<float, (size_t) kChCacheMax> drySnap {};
+                const int numChSnap = juce::jmin (numChEff, kChCacheMax);
+                for (int c = 0; c < numChSnap; ++c)
+                    drySnap[(size_t) c] = chPtrArr[(size_t) c][i];
 
                 const int tpCh = juce::jmin (2, numChEff);
                 for (int c = 0; c < tpCh; ++c)
@@ -1155,6 +1210,17 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
                 }
 
                 processOneSample (chPtrArr.data(), numChEff, i, lastInvSampleRate, driveDb, ceilingDb, bias01, link01, grDbNegMin);
+
+                // Phase 1.9 bypass blend: wet already computed into chPtrArr; drySnap preserves raw input for this sample.
+                if (bypassMix < 1.0f)
+                {
+                    for (int c = 0; c < numChSnap; ++c)
+                    {
+                        const float wet = chPtrArr[(size_t) c][i];
+                        const float dry = drySnap[(size_t) c];
+                        chPtrArr[(size_t) c][i] = bypassMix * wet + (1.0f - bypassMix) * dry;
+                    }
+                }
             }
 
             grDbForUI.store ((float) juce::jlimit (0.0, 120.0, -grDbNegMin), std::memory_order_relaxed);
