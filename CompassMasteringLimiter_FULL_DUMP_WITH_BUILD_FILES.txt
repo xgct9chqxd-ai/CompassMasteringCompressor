@@ -1,3 +1,754 @@
+===== FILE: ./build_phase0/cmake_install.cmake =====
+# Install script for directory: /Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter
+
+# Set the install prefix
+if(NOT DEFINED CMAKE_INSTALL_PREFIX)
+  set(CMAKE_INSTALL_PREFIX "/usr/local")
+endif()
+string(REGEX REPLACE "/$" "" CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
+
+# Set the install configuration name.
+if(NOT DEFINED CMAKE_INSTALL_CONFIG_NAME)
+  if(BUILD_TYPE)
+    string(REGEX REPLACE "^[^A-Za-z0-9_]+" ""
+           CMAKE_INSTALL_CONFIG_NAME "${BUILD_TYPE}")
+  else()
+    set(CMAKE_INSTALL_CONFIG_NAME "")
+  endif()
+  message(STATUS "Install configuration: \"${CMAKE_INSTALL_CONFIG_NAME}\"")
+endif()
+
+# Set the component getting installed.
+if(NOT CMAKE_INSTALL_COMPONENT)
+  if(COMPONENT)
+    message(STATUS "Install component: \"${COMPONENT}\"")
+    set(CMAKE_INSTALL_COMPONENT "${COMPONENT}")
+  else()
+    set(CMAKE_INSTALL_COMPONENT)
+  endif()
+endif()
+
+# Is this installation the result of a crosscompile?
+if(NOT DEFINED CMAKE_CROSSCOMPILING)
+  set(CMAKE_CROSSCOMPILING "FALSE")
+endif()
+
+# Set path to fallback-tool for dependency-resolution.
+if(NOT DEFINED CMAKE_OBJDUMP)
+  set(CMAKE_OBJDUMP "/usr/bin/objdump")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
+  include("/Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter/build_phase0/JUCE/cmake_install.cmake")
+endif()
+
+string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
+       "${CMAKE_INSTALL_MANIFEST_FILES}")
+if(CMAKE_INSTALL_LOCAL_ONLY)
+  file(WRITE "/Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter/build_phase0/install_local_manifest.txt"
+     "${CMAKE_INSTALL_MANIFEST_CONTENT}")
+endif()
+if(CMAKE_INSTALL_COMPONENT)
+  if(CMAKE_INSTALL_COMPONENT MATCHES "^[a-zA-Z0-9_.+-]+$")
+    set(CMAKE_INSTALL_MANIFEST "install_manifest_${CMAKE_INSTALL_COMPONENT}.txt")
+  else()
+    string(MD5 CMAKE_INST_COMP_HASH "${CMAKE_INSTALL_COMPONENT}")
+    set(CMAKE_INSTALL_MANIFEST "install_manifest_${CMAKE_INST_COMP_HASH}.txt")
+    unset(CMAKE_INST_COMP_HASH)
+  endif()
+else()
+  set(CMAKE_INSTALL_MANIFEST "install_manifest.txt")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  file(WRITE "/Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter/build_phase0/${CMAKE_INSTALL_MANIFEST}"
+     "${CMAKE_INSTALL_MANIFEST_CONTENT}")
+endif()
+
+===== FILE: ./build_reference/cmake_install.cmake =====
+# Install script for directory: /Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter
+
+# Set the install prefix
+if(NOT DEFINED CMAKE_INSTALL_PREFIX)
+  set(CMAKE_INSTALL_PREFIX "/usr/local")
+endif()
+string(REGEX REPLACE "/$" "" CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
+
+# Set the install configuration name.
+if(NOT DEFINED CMAKE_INSTALL_CONFIG_NAME)
+  if(BUILD_TYPE)
+    string(REGEX REPLACE "^[^A-Za-z0-9_]+" ""
+           CMAKE_INSTALL_CONFIG_NAME "${BUILD_TYPE}")
+  else()
+    set(CMAKE_INSTALL_CONFIG_NAME "Debug")
+  endif()
+  message(STATUS "Install configuration: \"${CMAKE_INSTALL_CONFIG_NAME}\"")
+endif()
+
+# Set the component getting installed.
+if(NOT CMAKE_INSTALL_COMPONENT)
+  if(COMPONENT)
+    message(STATUS "Install component: \"${COMPONENT}\"")
+    set(CMAKE_INSTALL_COMPONENT "${COMPONENT}")
+  else()
+    set(CMAKE_INSTALL_COMPONENT)
+  endif()
+endif()
+
+# Is this installation the result of a crosscompile?
+if(NOT DEFINED CMAKE_CROSSCOMPILING)
+  set(CMAKE_CROSSCOMPILING "FALSE")
+endif()
+
+# Set path to fallback-tool for dependency-resolution.
+if(NOT DEFINED CMAKE_OBJDUMP)
+  set(CMAKE_OBJDUMP "/usr/bin/objdump")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
+  include("/Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter/build_reference/JUCE/cmake_install.cmake")
+endif()
+
+string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
+       "${CMAKE_INSTALL_MANIFEST_FILES}")
+if(CMAKE_INSTALL_LOCAL_ONLY)
+  file(WRITE "/Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter/build_reference/install_local_manifest.txt"
+     "${CMAKE_INSTALL_MANIFEST_CONTENT}")
+endif()
+if(CMAKE_INSTALL_COMPONENT)
+  if(CMAKE_INSTALL_COMPONENT MATCHES "^[a-zA-Z0-9_.+-]+$")
+    set(CMAKE_INSTALL_MANIFEST "install_manifest_${CMAKE_INSTALL_COMPONENT}.txt")
+  else()
+    string(MD5 CMAKE_INST_COMP_HASH "${CMAKE_INSTALL_COMPONENT}")
+    set(CMAKE_INSTALL_MANIFEST "install_manifest_${CMAKE_INST_COMP_HASH}.txt")
+    unset(CMAKE_INST_COMP_HASH)
+  endif()
+else()
+  set(CMAKE_INSTALL_MANIFEST "install_manifest.txt")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  file(WRITE "/Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter/build_reference/${CMAKE_INSTALL_MANIFEST}"
+     "${CMAKE_INSTALL_MANIFEST_CONTENT}")
+endif()
+
+===== FILE: ./CMakeLists.txt =====
+cmake_minimum_required(VERSION 3.18)
+project(CompassMasteringLimiter VERSION 0.0.1)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+add_subdirectory(JUCE)
+
+add_subdirectory(reference_core EXCLUDE_FROM_ALL)
+add_subdirectory(reference_harness EXCLUDE_FROM_ALL)
+add_subdirectory(reference_tests EXCLUDE_FROM_ALL)
+
+juce_add_plugin(CompassMasteringLimiter
+    COMPANY_NAME "Compass"
+    IS_SYNTH FALSE
+    NEEDS_MIDI_INPUT FALSE
+    NEEDS_MIDI_OUTPUT FALSE
+    IS_MIDI_EFFECT FALSE
+    COPY_PLUGIN_AFTER_BUILD FALSE
+    PLUGIN_MANUFACTURER_CODE Comp
+    PLUGIN_CODE CML1
+    FORMATS VST3
+    PRODUCT_NAME "Compass Mastering Limiter"
+)
+
+add_custom_command(TARGET CompassMasteringLimiter_VST3 POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$ENV{HOME}/Library/Audio/Plug-Ins/VST3"
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "$ENV{HOME}/Library/Audio/Plug-Ins/VST3/Compass Mastering Limiter.vst3"
+    COMMAND ${CMAKE_COMMAND} -E create_symlink
+            "${CMAKE_CURRENT_BINARY_DIR}/CompassMasteringLimiter_artefacts/VST3/Compass Mastering Limiter.vst3"
+            "$ENV{HOME}/Library/Audio/Plug-Ins/VST3/Compass Mastering Limiter.vst3"
+    VERBATIM
+)
+
+target_sources(CompassMasteringLimiter PRIVATE
+    Source/Plugin/PluginProcessor.cpp
+    Source/Plugin/PluginProcessor.h
+    Source/Plugin/PluginEditor.cpp
+    Source/Plugin/PluginEditor.h
+)
+
+target_compile_definitions(CompassMasteringLimiter PRIVATE
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+)
+
+target_link_libraries(CompassMasteringLimiter PRIVATE
+    juce::juce_audio_utils
+    juce::juce_dsp
+    juce::juce_gui_extra
+)
+
+===== FILE: ./JUCE/CMakeLists.txt =====
+# ==============================================================================
+#
+#  This file is part of the JUCE framework.
+#  Copyright (c) Raw Material Software Limited
+#
+#  JUCE is an open source framework subject to commercial or open source
+#  licensing.
+#
+#  By downloading, installing, or using the JUCE framework, or combining the
+#  JUCE framework with any other source code, object code, content or any other
+#  copyrightable work, you agree to the terms of the JUCE End User Licence
+#  Agreement, and all incorporated terms including the JUCE Privacy Policy and
+#  the JUCE Website Terms of Service, as applicable, which will bind you. If you
+#  do not agree to the terms of these agreements, we will not license the JUCE
+#  framework to you, and you must discontinue the installation or download
+#  process and cease use of the JUCE framework.
+#
+#  JUCE End User Licence Agreement: https://juce.com/legal/juce-8-licence/
+#  JUCE Privacy Policy: https://juce.com/juce-privacy-policy
+#  JUCE Website Terms of Service: https://juce.com/juce-website-terms-of-service/
+#
+#  Or:
+#
+#  You may also use this code under the terms of the AGPLv3:
+#  https://www.gnu.org/licenses/agpl-3.0.en.html
+#
+#  THE JUCE FRAMEWORK IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL
+#  WARRANTIES, WHETHER EXPRESSED OR IMPLIED, INCLUDING WARRANTY OF
+#  MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, ARE DISCLAIMED.
+#
+# ==============================================================================
+
+cmake_minimum_required(VERSION 3.22)
+
+project(JUCE VERSION 8.0.12 LANGUAGES C CXX)
+
+include(CMakeDependentOption)
+
+set_property(GLOBAL PROPERTY USE_FOLDERS YES)
+
+set(JUCE_MODULES_DIR "${JUCE_SOURCE_DIR}/modules" CACHE INTERNAL
+    "The path to JUCE modules")
+
+# This option will disable most of the JUCE helper functions and tools. This option exists to
+# facilitate existing CMake builds which handle things like bundle creation, icons, plists, and
+# binary data independently of JUCE. This option is not recommended - use at your own risk!
+
+option(JUCE_MODULES_ONLY "Only configure the JUCE modules" OFF)
+
+include(extras/Build/CMake/JUCEModuleSupport.cmake)
+
+# This option controls whether dummy targets are added to the build, where these targets contain all
+# of the source files for each JUCE module. If you're planning to use an IDE and want to be able to
+# browse all of JUCE's source files, this may be useful. However, it will increase the size of
+# generated IDE projects and might slow down configuration a bit. If you enable this, you should
+# probably also add `set_property(GLOBAL PROPERTY USE_FOLDERS YES)` to your top level CMakeLists,
+# otherwise the module sources will be added directly to the top level of the project, instead of in
+# a nice 'Modules' subfolder.
+
+cmake_dependent_option(JUCE_ENABLE_MODULE_SOURCE_GROUPS
+    "Show all module sources in IDE projects" OFF
+    "NOT JUCE_MODULES_ONLY" OFF)
+
+add_subdirectory(modules)
+
+if(JUCE_MODULES_ONLY)
+    return()
+endif()
+
+include(extras/Build/CMake/JUCEUtils.cmake)
+
+set_directory_properties(PROPERTIES
+    JUCE_COMPANY_NAME       "JUCE"
+    JUCE_COMPANY_WEBSITE    "https://juce.com"
+    JUCE_COMPANY_EMAIL      "info@juce.com"
+    JUCE_COMPANY_COPYRIGHT  "Copyright (c) - Raw Material Software Limited")
+
+option(JUCE_COPY_PLUGIN_AFTER_BUILD
+    "Whether or not plugins should be installed to the system after building" OFF)
+set_property(GLOBAL PROPERTY JUCE_COPY_PLUGIN_AFTER_BUILD ${JUCE_COPY_PLUGIN_AFTER_BUILD})
+
+set(CMAKE_CXX_EXTENSIONS FALSE)
+
+juce_disable_default_flags()
+
+add_subdirectory(extras/Build)
+
+# If you want to build the JUCE examples with VST2/AAX/ARA support, you'll need to make the
+# VST2/AAX/ARA headers visible to the juce_audio_processors module. You can either set the paths on
+# the command line, (e.g. -DJUCE_GLOBAL_AAX_SDK_PATH=/path/to/sdk) if you're just building the JUCE
+# examples, or you can call the `juce_set_*_sdk_path` functions in your own CMakeLists after
+# importing JUCE.
+
+if(JUCE_GLOBAL_AAX_SDK_PATH)
+    juce_set_aax_sdk_path("${JUCE_GLOBAL_AAX_SDK_PATH}")
+endif()
+
+if(JUCE_GLOBAL_VST2_SDK_PATH)
+    juce_set_vst2_sdk_path("${JUCE_GLOBAL_VST2_SDK_PATH}")
+endif()
+
+# The ARA_SDK path should point to the "Umbrella installer" ARA_SDK directory.
+# The directory can be obtained by recursively cloning https://github.com/Celemony/ARA_SDK and
+# checking out the tag releases/2.1.0.
+if(JUCE_GLOBAL_ARA_SDK_PATH)
+    juce_set_ara_sdk_path("${JUCE_GLOBAL_ARA_SDK_PATH}")
+endif()
+
+# We don't build anything other than the juceaide by default, because we want to keep configuration
+# speedy and the number of targets low. If you want to add targets for the extra projects and
+# example PIPs (there's a lot of them!), specify -DJUCE_BUILD_EXAMPLES=ON and/or
+# -DJUCE_BUILD_EXTRAS=ON when initially generating your build tree.
+
+option(JUCE_BUILD_EXTRAS "Add build targets for the Projucer and other tools" OFF)
+
+if(JUCE_BUILD_EXTRAS)
+    add_subdirectory(extras)
+endif()
+
+option(JUCE_BUILD_EXAMPLES "Add build targets for the DemoRunner and PIPs" OFF)
+
+if(JUCE_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
+
+string(CONCAT webview2_option_message "Location that overrides the default directory where our "
+                                      "FindWebView2 script is looking for the "
+                                      "*Microsoft.Web.WebView2* directory")
+
+option(JUCE_WEBVIEW2_PACKAGE_LOCATION ${webview2_option_message} "")
+
+# ==================================================================================================
+# Install configuration
+
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file("${JUCE_BINARY_DIR}/JUCEConfigVersion.cmake"
+    VERSION ${JUCE_VERSION}
+    COMPATIBILITY ExactVersion)
+
+set(JUCE_INSTALL_DESTINATION "lib/cmake/JUCE-${JUCE_VERSION}" CACHE STRING
+    "The location, relative to the install prefix, where the JUCE config file will be installed")
+
+set(JUCE_MODULE_PATH "include/JUCE-${JUCE_VERSION}/modules")
+set(UTILS_INSTALL_DIR "${JUCE_INSTALL_DESTINATION}")
+set(JUCEAIDE_PATH "${JUCE_TOOL_INSTALL_DIR}/${JUCE_JUCEAIDE_NAME}")
+configure_package_config_file("${JUCE_CMAKE_UTILS_DIR}/JUCEConfig.cmake.in"
+    "${JUCE_BINARY_DIR}/JUCEConfig.cmake"
+    PATH_VARS UTILS_INSTALL_DIR JUCEAIDE_PATH JUCE_MODULE_PATH
+    INSTALL_DESTINATION "${JUCE_INSTALL_DESTINATION}")
+
+set(JUCE_MODULE_PATH "${JUCE_MODULES_DIR}")
+set(UTILS_INSTALL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/extras/Build/CMake")
+get_target_property(JUCEAIDE_PATH juceaide IMPORTED_LOCATION)
+configure_package_config_file("${JUCE_CMAKE_UTILS_DIR}/JUCEConfig.cmake.in"
+    "${JUCE_BINARY_DIR}/JUCEExportConfig.cmake"
+    PATH_VARS UTILS_INSTALL_DIR JUCEAIDE_PATH JUCE_MODULE_PATH
+    INSTALL_PREFIX "${CMAKE_CURRENT_BINARY_DIR}"
+    INSTALL_DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+
+install(FILES "${JUCE_BINARY_DIR}/JUCEConfigVersion.cmake"
+              "${JUCE_BINARY_DIR}/JUCEConfig.cmake"
+              "${JUCE_CMAKE_UTILS_DIR}/JUCECheckAtomic.cmake"
+              "${JUCE_CMAKE_UTILS_DIR}/JUCEHelperTargets.cmake"
+              "${JUCE_CMAKE_UTILS_DIR}/JUCEModuleSupport.cmake"
+              "${JUCE_CMAKE_UTILS_DIR}/JUCEUtils.cmake"
+              "${JUCE_CMAKE_UTILS_DIR}/JuceLV2Defines.h.in"
+              "${JUCE_CMAKE_UTILS_DIR}/LaunchScreen.storyboard"
+              "${JUCE_CMAKE_UTILS_DIR}/PIPAudioProcessor.cpp.in"
+              "${JUCE_CMAKE_UTILS_DIR}/PIPAudioProcessorWithARA.cpp.in"
+              "${JUCE_CMAKE_UTILS_DIR}/PIPComponent.cpp.in"
+              "${JUCE_CMAKE_UTILS_DIR}/PIPConsole.cpp.in"
+              "${JUCE_CMAKE_UTILS_DIR}/RecentFilesMenuTemplate.nib"
+              "${JUCE_CMAKE_UTILS_DIR}/UnityPluginGUIScript.cs.in"
+              "${JUCE_CMAKE_UTILS_DIR}/checkBundleSigning.cmake"
+              "${JUCE_CMAKE_UTILS_DIR}/copyDir.cmake"
+              "${JUCE_CMAKE_UTILS_DIR}/juce_runtime_arch_detection.cpp"
+              "${JUCE_CMAKE_UTILS_DIR}/juce_LinuxSubprocessHelper.cpp"
+        DESTINATION "${JUCE_INSTALL_DESTINATION}")
+
+if(("${CMAKE_SOURCE_DIR}" STREQUAL "${JUCE_SOURCE_DIR}") AND (NOT JUCE_BUILD_HELPER_TOOLS))
+    _juce_add_lv2_manifest_helper_target()
+
+    if(TARGET juce_lv2_helper)
+        install(TARGETS juce_lv2_helper EXPORT LV2_HELPER DESTINATION "bin/JUCE-${JUCE_VERSION}")
+        install(EXPORT LV2_HELPER NAMESPACE juce:: DESTINATION "${JUCE_INSTALL_DESTINATION}")
+    endif()
+endif()
+
+===== FILE: ./reference_core/CMakeLists.txt =====
+add_library(reference_core INTERFACE)
+target_include_directories(reference_core INTERFACE
+    ${CMAKE_CURRENT_LIST_DIR}/include
+)
+
+===== FILE: ./reference_harness/CMakeLists.txt =====
+add_executable(reference_harness
+    Source/main.cpp
+)
+
+target_link_libraries(reference_harness PRIVATE
+    reference_core
+)
+
+===== FILE: ./reference_tests/CMakeLists.txt =====
+add_executable(reference_tests
+    Source/main.cpp
+)
+
+target_link_libraries(reference_tests PRIVATE
+    reference_core
+)
+
+===== FILE: Source/Plugin/PluginEditor.cpp =====
+#include "PluginEditor.h"
+
+static void setRotary (juce::Slider& s)
+{
+    s.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+    s.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 88, 20);
+
+    // Force visibility on dark UI (neutral, high-contrast; no "good/bad" color semantics)
+    s.setColour (juce::Slider::rotarySliderOutlineColourId, juce::Colours::white.withAlpha (0.35f));
+    s.setColour (juce::Slider::rotarySliderFillColourId,    juce::Colours::white.withAlpha (0.85f));
+    s.setColour (juce::Slider::thumbColourId,               juce::Colours::white.withAlpha (0.90f));
+
+    s.setColour (juce::Slider::textBoxTextColourId,         juce::Colours::white.withAlpha (0.90f));
+    s.setColour (juce::Slider::textBoxOutlineColourId,      juce::Colours::white.withAlpha (0.25f));
+    s.setColour (juce::Slider::textBoxBackgroundColourId,   juce::Colours::transparentBlack);
+}
+
+CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcessorEditor (CompassMasteringLimiterAudioProcessor& p)
+: juce::AudioProcessorEditor (&p), processor (p)
+{
+    setResizable (false, false);
+    setSize (820, 360);
+
+    setRotary (drive);
+    addAndMakeVisible (drive);
+
+    setRotary (ceiling);
+    addAndMakeVisible (ceiling);
+    adaptiveBias.addItem ("Transparent", 1);
+    adaptiveBias.addItem ("Balanced", 2);
+    adaptiveBias.addItem ("Aggressive", 3);
+    addAndMakeVisible (adaptiveBias);
+
+    stereoLink.setSliderStyle (juce::Slider::LinearHorizontal);
+    stereoLink.setTextBoxStyle (juce::Slider::TextBoxRight, false, 90, 20);
+    addAndMakeVisible (stereoLink);
+
+    oversamplingMin.addItem ("2x", 1);
+    oversamplingMin.addItem ("4x", 2);
+    oversamplingMin.addItem ("8x", 3);
+    addAndMakeVisible (oversamplingMin);
+
+    addAndMakeVisible (grMeter);
+    grMeter.setInterceptsMouseClicks (false, false);
+    grMeter.toBack();
+
+    currentGrLabel.setJustificationType (juce::Justification::centredRight);
+    currentGrLabel.setFont (juce::Font (14.0f));
+    currentGrLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    currentGrLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    currentGrLabel.setInterceptsMouseClicks (false, false);
+    currentGrLabel.setText ("0.0 dB", juce::dontSendNotification);
+    addAndMakeVisible (currentGrLabel);
+
+    inTpLabel.setJustificationType (juce::Justification::centredLeft);
+    inTpLabel.setFont (juce::Font (13.0f));
+    inTpLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    inTpLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    inTpLabel.setInterceptsMouseClicks (false, false);
+    inTpLabel.setText ("IN TP: -120.0 dBTP", juce::dontSendNotification);
+    addAndMakeVisible (inTpLabel);
+
+    outTpLabel.setJustificationType (juce::Justification::centredLeft);
+    outTpLabel.setFont (juce::Font (13.0f));
+    outTpLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    outTpLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    outTpLabel.setInterceptsMouseClicks (false, false);
+    outTpLabel.setText ("OUT TP: -120.0 dBTP", juce::dontSendNotification);
+    addAndMakeVisible (outTpLabel);
+
+    lufsSLabel.setJustificationType (juce::Justification::centredLeft);
+    lufsSLabel.setFont (juce::Font (13.0f));
+    lufsSLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    lufsSLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    lufsSLabel.setInterceptsMouseClicks (false, false);
+    lufsSLabel.setText ("LUFS-S: -120.0", juce::dontSendNotification);
+    addAndMakeVisible (lufsSLabel);
+
+    lufsILabel.setJustificationType (juce::Justification::centredLeft);
+    lufsILabel.setFont (juce::Font (13.0f));
+    lufsILabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    lufsILabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    lufsILabel.setInterceptsMouseClicks (false, false);
+    lufsILabel.setText ("LUFS-I: -120.0", juce::dontSendNotification);
+    addAndMakeVisible (lufsILabel);
+
+    inPeakLabel.setJustificationType (juce::Justification::centredLeft);
+    inPeakLabel.setFont (juce::Font (13.0f));
+    inPeakLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    inPeakLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    inPeakLabel.setInterceptsMouseClicks (false, false);
+    inPeakLabel.setText ("IN PEAK: -120.0 dBFS", juce::dontSendNotification);
+    addAndMakeVisible (inPeakLabel);
+
+    outPeakLabel.setJustificationType (juce::Justification::centredLeft);
+    outPeakLabel.setFont (juce::Font (13.0f));
+    outPeakLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    outPeakLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    outPeakLabel.setInterceptsMouseClicks (false, false);
+    outPeakLabel.setText ("OUT PEAK: -120.0 dBFS", juce::dontSendNotification);
+    addAndMakeVisible (outPeakLabel);
+
+    ceilingLabel.setJustificationType (juce::Justification::centredLeft);
+    ceilingLabel.setFont (juce::Font (13.0f));
+    ceilingLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    ceilingLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    ceilingLabel.setInterceptsMouseClicks (false, false);
+    ceilingLabel.setText ("CEILING: -1.0 dBTP", juce::dontSendNotification);
+    addAndMakeVisible (ceilingLabel);
+
+    auto& vts = processor.getAPVTS();
+
+    driveA   = std::make_unique<APVTS::SliderAttachment> (vts, "drive", drive);
+    ceilingA = std::make_unique<APVTS::SliderAttachment> (vts, "ceiling", ceiling);
+    biasA    = std::make_unique<APVTS::ComboBoxAttachment> (vts, "adaptive_bias", adaptiveBias);
+    linkA    = std::make_unique<APVTS::SliderAttachment> (vts, "stereo_link", stereoLink);
+    osA      = std::make_unique<APVTS::ComboBoxAttachment> (vts, "oversampling_min", oversamplingMin);
+
+    startTimerHz (30);
+}
+
+void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
+{
+    const float current = processor.getCurrentGRDb();
+
+    grMeter.pushValueDb (current);
+    currentGrLabel.setText (juce::String::formatted ("%.1f dB", current), juce::dontSendNotification);
+
+    float inTp = -120.0f;
+    float outTp = -120.0f;
+    if (processor.getCurrentTruePeakDbTP (inTp, outTp))
+    {
+        inTp = juce::jmax (-120.0f, inTp);
+        outTp = juce::jmax (-120.0f, outTp);
+        inTpLabel.setText (juce::String::formatted ("IN TP: %.1f dBTP", inTp), juce::dontSendNotification);
+        outTpLabel.setText (juce::String::formatted ("OUT TP: %.1f dBTP", outTp), juce::dontSendNotification);
+    }
+
+    float lufsS = -120.0f;
+    float lufsI = -120.0f;
+    if (processor.getCurrentLufsDb (lufsS, lufsI))
+    {
+        lufsS = juce::jmax (-120.0f, lufsS);
+        lufsI = juce::jmax (-120.0f, lufsI);
+        lufsSLabel.setText (juce::String::formatted ("LUFS-S: %.1f", lufsS), juce::dontSendNotification);
+        lufsILabel.setText (juce::String::formatted ("LUFS-I: %.1f", lufsI), juce::dontSendNotification);
+    }
+
+    float inPk = -120.0f;
+    float outPk = -120.0f;
+    if (processor.getCurrentPeakDbFS (inPk, outPk))
+    {
+        inPk = juce::jmax (-120.0f, inPk);
+        outPk = juce::jmax (-120.0f, outPk);
+        inPeakLabel.setText (juce::String::formatted ("IN PEAK: %.1f dBFS", inPk), juce::dontSendNotification);
+        outPeakLabel.setText (juce::String::formatted ("OUT PEAK: %.1f dBFS", outPk), juce::dontSendNotification);
+    }
+
+    const float ceilDb = processor.getCurrentCeilingDbTP();
+    ceilingLabel.setText (juce::String::formatted ("CEILING: %.1f dBTP", ceilDb), juce::dontSendNotification);
+
+    grMeter.repaint();
+}
+
+void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
+{
+    g.fillAll (juce::Colours::black);
+
+    // Title
+    g.setColour (juce::Colours::white.withAlpha (0.85f));
+    g.setFont (14.0f);
+    g.drawText ("Compass Mastering Limiter", 16, 10, getWidth() - 32, 20, juce::Justification::left);
+
+    // Static labels (constitution: labeling for all visible controls)
+    auto drawLabelAbove = [&] (const juce::Component& c, const juce::String& label)
+    {
+        auto r = c.getBounds().translated (0, -18);
+        r.setHeight (16);
+        g.setColour (juce::Colours::white.withAlpha (0.70f));
+        g.setFont (12.5f);
+        g.drawText (label, r, juce::Justification::centred, false);
+    };
+
+    drawLabelAbove (drive,           "Drive");
+    drawLabelAbove (ceiling,         "Ceiling");
+    drawLabelAbove (adaptiveBias,    "Adaptive Bias");
+    drawLabelAbove (stereoLink,      "Stereo Link");
+    drawLabelAbove (oversamplingMin, "Oversampling Min");
+}
+
+void CompassMasteringLimiterAudioProcessorEditor::resized()
+{
+    auto b = getLocalBounds().reduced (16);
+    b.removeFromTop (30);
+
+    const int knob = 104;
+    const int gap  = 16;
+
+    auto row = b.removeFromTop (knob + 30);
+
+    drive.setBounds (row.removeFromLeft (knob));
+    row.removeFromLeft (gap);
+    ceiling.setBounds (row.removeFromLeft (knob));
+    row.removeFromLeft (gap);
+
+    adaptiveBias.setBounds (row.removeFromLeft (260).withTrimmedTop (34).withHeight (26));
+    row.removeFromLeft (gap);
+    stereoLink.setBounds (row.removeFromLeft (260).withTrimmedTop (34).withHeight (26));
+    row.removeFromLeft (gap);
+    oversamplingMin.setBounds (row.removeFromLeft (100).withTrimmedTop (34).withHeight (26));
+
+    b.removeFromTop (10);
+
+    // Primary meter zone (Verification): GR bar + numeric, then truth readouts below.
+    const int grH     = 32;
+    const int colW    = 220;
+    const int padX    = 10;
+    const int rowH    = 18;
+    const int rowGap  = 6;
+    const int topGap  = 10;
+
+    const int truthH  = (rowH * 4) + (rowGap * 3);   // 4 rows: TP, LUFS, PEAK, CEILING
+    const int zoneH   = grH + topGap + truthH;
+
+    auto meterZone = b.removeFromTop (zoneH);
+
+    grMeter.setBounds (meterZone.removeFromTop (grH));
+    auto m = grMeter.getBounds();
+
+    // GR numeric (right side of the bar zone)
+    currentGrLabel.setBounds (m.getRight() - 90, m.getY() + 6, 84, 18);
+
+    // Truth readouts grid (2-column, multi-row)
+    const int leftX  = m.getX() + padX;
+    const int rightX = m.getRight() - colW - padX;
+
+    const int y1 = meterZone.getY() + 6;             // Row 1
+    const int y2 = y1 + rowH + rowGap;               // Row 2
+    const int y3 = y2 + rowH + rowGap;               // Row 3
+    const int y4 = y3 + rowH + rowGap;               // Row 4 (Ceiling)
+
+    // Row 1: IN/OUT TP
+    inTpLabel.setBounds  (leftX,  y1, colW, rowH);
+    outTpLabel.setBounds (rightX, y1, colW, rowH);
+
+    // Row 2: LUFS-S / LUFS-I
+    lufsSLabel.setBounds (leftX,  y2, colW, rowH);
+    lufsILabel.setBounds (rightX, y2, colW, rowH);
+
+    // Row 3: IN/OUT PEAK
+    inPeakLabel.setBounds  (leftX,  y3, colW, rowH);
+    outPeakLabel.setBounds (rightX, y3, colW, rowH);
+
+    // Row 4: CEILING (full width)
+    ceilingLabel.setBounds (m.getX() + padX, y4, m.getWidth() - (2 * padX), rowH);
+}
+
+===== FILE: Source/Plugin/PluginEditor.h =====
+#pragma once
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <cmath>
+#include "PluginProcessor.h"
+
+class GRHistoryMeter final : public juce::Component
+{
+public:
+    void pushValueDb (float grDb) noexcept
+    {
+        if (! std::isfinite (grDb)) grDb = 0.0f;
+
+        // UI contract: GR is stereo authority in positive dB (0..range).
+        constexpr float kRangeDb = 24.0f;
+        lastGrDb = juce::jlimit (0.0f, kRangeDb, grDb);
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        auto r = getLocalBounds().toFloat().reduced (6.0f);
+
+        // Background
+        g.setColour (juce::Colours::white.withAlpha (0.10f));
+        g.fillRoundedRectangle (r, 8.0f);
+
+        // Filled bar (left -> right as GR increases)
+        constexpr float kRangeDb = 24.0f;
+        const float fill01 = juce::jlimit (0.0f, 1.0f, lastGrDb / kRangeDb);
+        auto fillR = r;
+        fillR.setWidth (r.getWidth() * fill01);
+
+        g.setColour (juce::Colours::white.withAlpha (0.60f));
+        g.fillRoundedRectangle (fillR, 8.0f);
+
+        // Label "GR"
+        auto labelR = r.reduced (10.0f, 6.0f);
+        g.setColour (juce::Colours::white.withAlpha (0.70f));
+        g.setFont (12.5f);
+        g.drawText ("GR", labelR.removeFromLeft (34.0f), juce::Justification::centredLeft, false);
+    }
+
+private:
+    float lastGrDb = 0.0f;
+};
+
+class CompassMasteringLimiterAudioProcessorEditor final
+    : public juce::AudioProcessorEditor
+    , private juce::Timer
+{
+public:
+    explicit CompassMasteringLimiterAudioProcessorEditor (CompassMasteringLimiterAudioProcessor&);
+    ~CompassMasteringLimiterAudioProcessorEditor() override = default;
+
+    void paint (juce::Graphics&) override;
+    void resized() override;
+
+private:
+    void timerCallback() override;
+
+    CompassMasteringLimiterAudioProcessor& processor;
+
+    juce::Slider drive;
+    juce::Slider ceiling;
+    juce::ComboBox adaptiveBias;
+    juce::Slider stereoLink;
+    juce::ComboBox oversamplingMin;
+
+    GRHistoryMeter grMeter;
+    juce::Label currentGrLabel;
+    juce::Label inTpLabel;
+    juce::Label outTpLabel;
+    juce::Label lufsSLabel;
+    juce::Label lufsILabel;
+
+    juce::Label inPeakLabel;
+    juce::Label outPeakLabel;
+    juce::Label ceilingLabel;
+
+    using APVTS = juce::AudioProcessorValueTreeState;
+    std::unique_ptr<APVTS::SliderAttachment> driveA;
+    std::unique_ptr<APVTS::SliderAttachment> ceilingA;
+    std::unique_ptr<APVTS::ComboBoxAttachment> biasA;
+    std::unique_ptr<APVTS::SliderAttachment> linkA;
+    std::unique_ptr<APVTS::ComboBoxAttachment> osA;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompassMasteringLimiterAudioProcessorEditor)
+};
+
+===== FILE: Source/Plugin/PluginProcessor.cpp =====
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
@@ -1028,6 +1779,8 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
                 }
             }
 
+            skipOsFastPath = false;
+
             if (! skipOsFastPath)
             {
 
@@ -1680,3 +2433,389 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new CompassMasteringLimiterAudioProcessor();
 }
+
+===== FILE: Source/Plugin/PluginProcessor.h =====
+#pragma once
+#include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_audio_basics/juce_audio_basics.h>
+#include <juce_dsp/juce_dsp.h>
+#include <array>
+#include <memory>
+#include <atomic>
+#include <cstdint>
+
+class CompassMasteringLimiterAudioProcessor final : public juce::AudioProcessor
+{
+public:
+    using APVTS = juce::AudioProcessorValueTreeState;
+
+    CompassMasteringLimiterAudioProcessor();
+    ~CompassMasteringLimiterAudioProcessor() override = default;
+
+    void prepareToPlay (double sampleRate, int samplesPerBlock) override;
+    void releaseResources() override;
+
+    bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
+
+    void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    void processBlockBypassed (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+
+    juce::AudioProcessorEditor* createEditor() override;
+    bool hasEditor() const override { return true; }
+
+    const juce::String getName() const override { return "Compass Mastering Limiter"; }
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+    bool isMidiEffect() const override { return false; }
+    double getTailLengthSeconds() const override { return 0.0; }
+
+    int getNumPrograms() override { return 1; }
+    int getCurrentProgram() override { return 0; }
+    void setCurrentProgram (int) override {}
+    const juce::String getProgramName (int) override { return {}; }
+    void changeProgramName (int, const juce::String&) override {}
+
+    void getStateInformation (juce::MemoryBlock&) override;
+    void setStateInformation (const void*, int) override;
+
+    APVTS& getAPVTS() noexcept { return *apvts; }
+    const APVTS& getAPVTS() const noexcept { return *apvts; }
+
+    float getCurrentGRDb() const noexcept { return grDbForUI.load(std::memory_order_relaxed); }
+
+    bool getCurrentTruePeakDbTP (float& inDbTP, float& outDbTP) const noexcept
+    {
+        MeterSnapshot s{};
+        if (! readMeters (s))
+            return false;
+
+        const double inStereo  = juce::jmax (s.inTpDb[0],  s.inTpDb[1]);
+        const double outStereo = juce::jmax (s.outTpDb[0], s.outTpDb[1]);
+
+        const double inClamped  = juce::jlimit (-120.0, 60.0, inStereo);
+        const double outClamped = juce::jlimit (-120.0, 60.0, outStereo);
+
+        inDbTP  = (float) inClamped;
+        outDbTP = (float) outClamped;
+        return true;
+    }
+
+    bool getCurrentLufsDb (float& lufsS, float& lufsI) const noexcept
+    {
+        MeterSnapshot s{};
+        if (! readMeters (s))
+            return false;
+
+        const double sClamped = juce::jlimit (-120.0, 60.0, s.lufsShortDb);
+        const double iClamped = juce::jlimit (-120.0, 60.0, s.lufsIntDb);
+
+        lufsS = (float) sClamped;
+        lufsI = (float) iClamped;
+        return true;
+    }
+
+    bool getCurrentPeakDbFS (float& inDbFS, float& outDbFS) const noexcept
+    {
+        MeterSnapshot s{};
+        if (! readMeters (s))
+            return false;
+
+        const double inStereo  = juce::jmax (s.inPeakDb[0],  s.inPeakDb[1]);
+        const double outStereo = juce::jmax (s.outPeakDb[0], s.outPeakDb[1]);
+
+        const double inClamped  = juce::jlimit (-120.0, 60.0, inStereo);
+        const double outClamped = juce::jlimit (-120.0, 60.0, outStereo);
+
+        inDbFS  = (float) inClamped;
+        outDbFS = (float) outClamped;
+        return true;
+    }
+
+    float getCurrentCeilingDbTP() const noexcept
+    {
+        const float v = apvts->getRawParameterValue ("ceiling")->load();
+        return (float) juce::jlimit (-120.0f, 60.0f, v);
+    }
+
+    // Phase 1.4 — deterministic probes (non-realtime; callable from tests/debug harness)
+    double probeSettleTimeSec (double sampleRate) const noexcept;
+    bool probeContinuityFastAutomation (double sampleRate, double& outMaxAbsDeltaDb) const noexcept;
+
+private:
+    static APVTS::ParameterLayout createParameterLayout();
+
+    // Meter snapshot (POD, numeric-only). UI may consume via future plumbing.
+    // Step 1.1: declare the data structure only (no instances, no publication mechanism yet).
+    struct MeterSnapshot final
+    {
+        double   inPeakDb[2]   { 0.0, 0.0 };
+        double   outPeakDb[2]  { 0.0, 0.0 };
+
+        double   inTpDb[2]     { 0.0, 0.0 };
+        double   outTpDb[2]    { 0.0, 0.0 };
+
+        double   grDb[2]       { 0.0, 0.0 }; // attenuation magnitude in dB (0..+)
+        double   lufsShortDb   = 0.0;
+        double   lufsIntDb     = 0.0;
+
+        double   crestPreDb    = 0.0;
+        double   crestPostDb   = 0.0;
+
+        uint64_t frameCounter  = 0; // monotonic debug-only counter
+    };
+
+    // Meter publication primitive (SPSC ring, lock-free; declarations only in this step).
+    // Producer: audio thread. Consumer: UI thread.
+    //
+    // Publication rules:
+    // - Audio thread writes at a fixed cadence (e.g., every 256 or 512 samples).
+    // - If ring is full, new writes overwrite the oldest unread snapshot (consumer may miss frames).
+    // - UI reads opportunistically; missed frames are acceptable.
+    // - Snapshot is immutable once published (writer writes slot fully, then advances write index).
+    //
+    // Indices are modulo kMeterRingCapacity.
+    static constexpr uint32_t kMeterRingCapacity = 128; // fixed, no allocations
+    std::array<MeterSnapshot, (size_t) kMeterRingCapacity> meterRing {};
+
+    // writeIndex: next slot the producer will publish.
+    // readIndex:  next slot the consumer will read (advanced by consumer; may be forced forward on overwrite).
+    // meterSeq:   publication signal (incremented by producer AFTER a snapshot is fully written and published).
+    std::atomic<uint32_t> meterWriteIndex { 0u };
+    mutable std::atomic<uint32_t> meterReadIndex  { 0u };
+    std::atomic<uint32_t> meterSeq        { 0u }; // wraparound OK
+
+    // Consumer-side tracking for readMeters(): updated only by UI thread.
+    // Atomic is used defensively; keep usage contained to metering plumbing only.
+    mutable std::atomic<uint32_t> meterLastReadSeq { 0u };
+
+    void publishMeters (const MeterSnapshot& s) noexcept;
+    bool readMeters (MeterSnapshot& out) const noexcept;
+
+    // Meter accumulators (double precision) — Step 3.1 (storage only; no meter math/publishing yet)
+    double inPeakHold[2]  = { 0.0, 0.0 };
+    double outPeakHold[2] = { 0.0, 0.0 };
+    double inRmsSq[2]     = { 0.0, 0.0 };
+    double outRmsSq[2]    = { 0.0, 0.0 };
+    double inTpHold[2]    = { 0.0, 0.0 };
+    double outTpHold[2]   = { 0.0, 0.0 };
+    double grHoldDb[2]    = { 0.0, 0.0 }; // attenuation magnitude in dB (0..+)
+
+    // Meter publish timing (members) — configured/used in later steps
+    int    meterPublishSamples = 0;
+    int    meterCountdown      = 0;
+    double meterDt             = 0.0;
+
+    // Loudness state (Phase 11): deterministic, bounded, allocation-free.
+    // Short-term is a fixed 3.0 s window implemented as 150 chunks at the meter cadence (~50 Hz).
+    // Integrated is a running mean-square accumulator.
+    static constexpr int kLufsHz          = 50;
+    static constexpr int kLufsShortSec    = 3;
+    static constexpr int kLufsShortChunks = kLufsHz * kLufsShortSec; // 150 (fixed, no allocations)
+
+    std::array<double, (size_t) kLufsShortChunks> lufsChunkE {};
+    uint32_t lufsChunkWrite  = 0u;
+    uint32_t lufsChunkFilled = 0u;
+    double   lufsShortSumE   = 0.0;
+
+    double   lufsCurChunkE   = 0.0;
+    int      lufsCurChunkN   = 0;
+
+    double   lufsIntSumE     = 0.0;
+    uint64_t lufsIntN        = 0u;
+
+    // Gate-3 deterministic state model:
+    void reset (double sampleRate, int maxBlock, int channels) noexcept;
+
+    // Oversampling + True Peak (Gate-4):
+    // - FIR polyphase only (linear-phase reconstruction)
+    // - Oversampling is prebuilt in prepareToPlay (no allocations in audio thread)
+    // - Active oversampling selection changes only on transport stop/start edge
+    void prepareOversampling (int channels, int maxBlock);
+    void selectOversamplingAtBoundary (int osMinIndex) noexcept;
+    void measureTruePeak (const juce::AudioBuffer<float>& buffer) noexcept;
+
+    // Phase D: promoted helpers (no allocations, no virtual dispatch)
+    static double onePoleAlpha (double tauSec, double dtSec) noexcept;
+    void processOneSample (float* const* chPtr,
+                          int numCh,
+                          int i,
+                          double dt,
+                          double driveDb,
+                          double ceilingDb,
+                          double bias01,
+                          double link01,
+                          double& grDbNegMin) noexcept;
+
+    // Gate-2 smoothing policy (declared now; configured in prepareToPlay/reset):
+    // - Drive/Ceiling: sample-accurate linear ramps (SmoothedValue)
+    // - Stereo Link / Adaptive Bias: smoothed (SmoothedValue)
+    // - Oversampling Min: discrete choice (no smoothing)
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> driveDbSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> ceilingDbSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> adaptiveBias01Smoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> stereoLink01Smoothed;
+
+    // Deterministic lifecycle context (captured in prepareToPlay/reset):
+    double lastSampleRate = 0.0;
+    double lastInvSampleRate = 0.0; // cached 1 / lastSampleRate (SR-derived coeff scalar)
+    double effectiveControlInvDt = 0.0; // 1.0 / nativeSR
+    double effectiveAudioInvDt   = 0.0; // 1.0 / (nativeSR * OSFactor); OSFactor=1.0 for now
+    int lastMaxBlock = 0;
+    int lastChannels = 0;
+
+    // Transport edge detection (stop/start triggers reset semantics):
+    bool transportKnown = false;
+    bool lastTransportPlaying = false;
+
+    // Offline/nonrealtime edge detection (transition triggers boundary semantics):
+    bool lastNonRealtime = false;
+
+    // Oversampling (prebuilt instances; selected at transport-safe boundary only)
+    static constexpr int kOsCount = 3; // 2x / 4x / 8x
+    std::array<std::unique_ptr<juce::dsp::Oversampling<float>>, kOsCount> oversamplers;
+    juce::dsp::Oversampling<float>* activeOversampler = nullptr;
+    std::array<int, kOsCount> oversamplerLatencySamples { 0, 0, 0 };
+    int latchedOsMinIndex = 0; // 0=2x, 1=4x, 2=8x (latched only at boundary)
+
+    // Control-domain true peak (linear)
+    double truePeakLin = 0.0;
+
+    // Phase 1.2 — True-Peak Detector Path (Reference)
+    // Polyphase FIR oversampled reconstruction (linear-phase, deterministic coefficients).
+    // Implemented as 4x interpolation; coefficients are symmetric (linear-phase) and normalized so sum(h) == 4.0.
+    static constexpr int kTpOSFactor = 4;
+    static constexpr int kTpTaps     = 32; // must be even and divisible by kTpOSFactor
+
+    static constexpr std::array<double, kTpTaps> kTpFIR {
+        -0.000000000000000000e+00,
+        -8.291365655703771638e-04,
+        -3.525756966746731828e-03,
+        -3.488316484777266926e-03,
+         6.579729475753049242e-03,
+         2.634752184268256830e-02,
+         4.035166818965605501e-02,
+         2.428673766138198312e-02,
+        -3.407969929110992585e-02,
+        -1.130051644440947245e-01,
+        -1.538132119698306655e-01,
+        -8.715260485310091787e-02,
+         1.222467629501392816e-01,
+         4.403366958529203457e-01,
+         7.651370491704410082e-01,
+         9.706077254322565961e-01,
+         9.706077254322565961e-01,
+         7.651370491704410082e-01,
+         4.403366958529203457e-01,
+         1.222467629501392955e-01,
+        -8.715260485310093175e-02,
+        -1.538132119698306377e-01,
+        -1.130051644440948078e-01,
+        -3.407969929110995361e-02,
+         2.428673766138198312e-02,
+         4.035166818965605501e-02,
+         2.634752184268256830e-02,
+         6.579729475753050977e-03,
+        -3.488316484777266926e-03,
+        -3.525756966746731828e-03,
+        -8.291365655703861626e-04,
+        -0.000000000000000000e+00
+    };
+
+    // Per-channel FIR history (preallocated; 2-channel accumulator contract).
+    std::array<std::array<double, kTpTaps>, 2> tpHist{};
+    std::array<int, 2> tpHistPos{};
+
+    // Detector-domain transient feature:
+    // First-order temporal derivative of peak magnitude (linear), per channel, per block.
+    std::array<double, 2> prevTpChLin { 0.0, 0.0 };
+    std::array<double, 2> tpDerivLin  { 0.0, 0.0 };
+
+    // Phase 1.2 — Sustained energy accumulator (detector domain):
+    // Broadband power EMA of reconstructed samples (double), per channel.
+    // Decay law is locked: a = exp(-dt/tau) via onePoleAlpha(tau, dt).
+    static constexpr double kTpSustainedTauSec = 0.040;
+    std::array<double, 2> tpSustainedPowEma { 0.0, 0.0 };
+
+    void resetTruePeakDetector() noexcept
+    {
+        for (int c = 0; c < 2; ++c)
+        {
+            tpHist[(size_t) c].fill (0.0);
+            tpHistPos[(size_t) c] = 0;
+
+            prevTpChLin[(size_t) c] = 0.0;
+            tpDerivLin[(size_t) c]  = 0.0;
+            tpSustainedPowEma[(size_t) c] = 0.0;
+        }
+    }
+
+    // UI meter readout (GR in dB, negative: 0..-60). Published once per block (atomic, lock-free).
+    std::atomic<float> grDbForUI { 0.0f };
+
+
+    // Output scalar continuity (tiny, deterministic) — prevents micro-steps reaching the output
+    std::array<float, 2> lastOutScalar { 1.0f, 1.0f };
+
+    // Phase 1.9 — Bypass crossfade (sample-accurate, no resets on bypass edges)
+    float bypassMix = 1.0f; // 1=wet, 0=dry
+
+    // Phase 1.9 — Silence-horizon bounded memory (per-channel sample counter)
+    std::array<int, 2> silenceCountSamples { 0, 0 };
+    // Guards + Safety Rails (Gate-10):
+    // - Hard bounds: attenuation depth already clamped via kMaxAttnDb in processBlock
+    // - Slew limiting: prevents extreme step changes from bad automation or math glitches
+    std::array<double, 2> lastAppliedAttnDb { 0.0, 0.0 };
+
+    // Tiny GR floor + hysteresis memory (per-channel) to prevent threshold chatter (observational behavior unchanged)
+    std::array<double, 2> lastAttnTargetDb { 0.0, 0.0 };
+
+    // CPU overload behavior: temporarily disable non-essential measurement extras (never changes user settings)
+    int overloadAssistBlocks = 0;
+
+    // NaN/Inf containment latch (release): if tripped, block output is forced safe and internal state resets
+    bool badMathThisBlock = false;
+
+    // Envelope system (Micro + Macro, coupled)
+    // Micro: critically damped 2nd-order model (no overshoot; ultra-fast capture; no ringing)
+    // Discrete-time implementation: two cascaded one-pole followers (stable for any dt; no stiffness).
+    // Macro: energy accumulation + exponential decay (bounded; monotonic)
+    // Coupling: macro state influences micro recovery behavior (no competing control paths)
+    std::array<double, 2> microStage1DbState { 0.0, 0.0 };
+    std::array<double, 2> microStage2DbState { 0.0, 0.0 };
+    std::array<double, 2> macroEnergyState   { 0.0, 0.0 };
+
+    // Gate: Adaptive Release inputs (deterministic, bounded, continuous)
+    // - Crest factor proxy: 50 ms rectangular moving-average RMS^2 ring (SR_max=192 kHz => N_max=9600)
+    // - Event density: continuous "event presence" accumulator (per-channel)
+    static constexpr int kCrestRmsWinMaxN = 9600; // ceil(0.050 * 192000) = 9600
+    double rmsSqRing[2][kCrestRmsWinMaxN] {};
+    double rmsSqSum[2] { 0.0, 0.0 };
+    int    rmsWriteIdx[2] { 0, 0 };
+    int    rmsWinN = 1; // runtime: ceil(0.050*sampleRate), clamped to [1, kCrestRmsWinMaxN]
+    int    rmsSilenceCount[2] { 0, 0 };
+    int    rmsSilenceResetN = 1; // runtime: ceil(0.100*sampleRate)
+    bool   invalidConfig = false; // set true if sampleRate > 192000.0
+    std::array<double, 2> eventDensityState  { 0.0, 0.0 };
+
+    // Spectral Guardrails (measurement-only; broadband application)
+    // Parallel measurement path:
+    // - frequency-selective measurement allowed
+    // - must not influence detector/envelope timing/shape
+    // - may only add subtle broadband GR under heavy limiting
+    std::array<double, 2> guardLpState  { 0.0, 0.0 }; // one-pole LP state for split
+    std::array<double, 2> guardHpState2 { 0.0, 0.0 }; // reserved state slot (2ch contract)
+    std::array<double, 2> guardTotE    { 0.0, 0.0 }; // total energy EMA
+    std::array<double, 2> guardHiE     { 0.0, 0.0 }; // high-band energy EMA
+    double guardNb0 = 0.0, guardNb1 = 0.0, guardNb2 = 0.0, guardNa1 = 0.0, guardNa2 = 0.0;
+
+    // GR average (Phase 1.7 activation): 50 ms one-pole EMA of grAbsDb (global, not per-channel)
+    double guardGrAvgDb = 0.0;
+
+    // Scratch buffer for oversampled measurement (double precision)
+    juce::AudioBuffer<float> workBufferFloat;
+
+    std::unique_ptr<APVTS> apvts;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompassMasteringLimiterAudioProcessor)
+};
+

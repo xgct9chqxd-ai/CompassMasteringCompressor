@@ -369,6 +369,7 @@ private:
     std::array<double, 2> guardHpState2 { 0.0, 0.0 }; // reserved state slot (2ch contract)
     std::array<double, 2> guardTotE    { 0.0, 0.0 }; // total energy EMA
     std::array<double, 2> guardHiE     { 0.0, 0.0 }; // high-band energy EMA
+    double guardNb0 = 0.0, guardNb1 = 0.0, guardNb2 = 0.0, guardNa1 = 0.0, guardNa2 = 0.0;
 
     // GR average (Phase 1.7 activation): 50 ms one-pole EMA of grAbsDb (global, not per-channel)
     double guardGrAvgDb = 0.0;
