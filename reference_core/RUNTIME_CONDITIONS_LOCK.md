@@ -45,6 +45,10 @@ For Phase 1.0, tests define "runtime conditions identical" as the following fixe
 - Fixed block size sequence:
   - The sequence may be constant or variable, but it must be a predefined scripted sequence.
   - No dependence on host scheduling or timing; the sequence is the schedule.
+- Block processing contract:
+  - `processBlock(...)` accepts arbitrary block sizes (no assumptions about `numSamples`).
+  - Identical results for identical sequences of blocks (same scripted block-size sequence, same inputs, same reset points).
+  - No block-size assumptions (no "every N samples" logic unless N is defined in time units and implemented sample-accurately).
 - Explicit reset events:
   - Reset points are declared and applied only at scripted boundaries (e.g., TransportStop, TransportStart).
 - Deterministic initial state:
