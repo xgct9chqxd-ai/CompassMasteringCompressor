@@ -1,3 +1,357 @@
+===== CompassMasteringLimiter — FULL SOURCE DUMP =====
+
+
+===== FILE: Source/Plugin/PluginEditor.cpp =====
+
+#include "PluginEditor.h"
+
+static void setRotary (juce::Slider& s)
+{
+    s.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+    s.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 88, 20);
+
+    // Force visibility on dark UI (neutral, high-contrast; no "good/bad" color semantics)
+    s.setColour (juce::Slider::rotarySliderOutlineColourId, juce::Colours::white.withAlpha (0.35f));
+    s.setColour (juce::Slider::rotarySliderFillColourId,    juce::Colours::white.withAlpha (0.85f));
+    s.setColour (juce::Slider::thumbColourId,               juce::Colours::white.withAlpha (0.90f));
+
+    s.setColour (juce::Slider::textBoxTextColourId,         juce::Colours::white.withAlpha (0.90f));
+    s.setColour (juce::Slider::textBoxOutlineColourId,      juce::Colours::white.withAlpha (0.25f));
+    s.setColour (juce::Slider::textBoxBackgroundColourId,   juce::Colours::transparentBlack);
+}
+
+CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcessorEditor (CompassMasteringLimiterAudioProcessor& p)
+: juce::AudioProcessorEditor (&p), processor (p)
+{
+    setResizable (false, false);
+    setSize (820, 360);
+
+    setRotary (drive);
+    addAndMakeVisible (drive);
+
+    setRotary (ceiling);
+    addAndMakeVisible (ceiling);
+    adaptiveBias.addItem ("Transparent", 1);
+    adaptiveBias.addItem ("Balanced", 2);
+    adaptiveBias.addItem ("Aggressive", 3);
+    addAndMakeVisible (adaptiveBias);
+
+    stereoLink.setSliderStyle (juce::Slider::LinearHorizontal);
+    stereoLink.setTextBoxStyle (juce::Slider::TextBoxRight, false, 90, 20);
+    addAndMakeVisible (stereoLink);
+
+    oversamplingMin.addItem ("2x", 1);
+    oversamplingMin.addItem ("4x", 2);
+    oversamplingMin.addItem ("8x", 3);
+    addAndMakeVisible (oversamplingMin);
+
+    addAndMakeVisible (grMeter);
+    grMeter.setInterceptsMouseClicks (false, false);
+    grMeter.toBack();
+
+    currentGrLabel.setJustificationType (juce::Justification::centredRight);
+    currentGrLabel.setFont (juce::Font (14.0f));
+    currentGrLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    currentGrLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    currentGrLabel.setInterceptsMouseClicks (false, false);
+    currentGrLabel.setText ("0.0 dB", juce::dontSendNotification);
+    addAndMakeVisible (currentGrLabel);
+
+    inTpLabel.setJustificationType (juce::Justification::centredLeft);
+    inTpLabel.setFont (juce::Font (13.0f));
+    inTpLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    inTpLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    inTpLabel.setInterceptsMouseClicks (false, false);
+    inTpLabel.setText ("IN TP: -120.0 dBTP", juce::dontSendNotification);
+    addAndMakeVisible (inTpLabel);
+
+    outTpLabel.setJustificationType (juce::Justification::centredLeft);
+    outTpLabel.setFont (juce::Font (13.0f));
+    outTpLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    outTpLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    outTpLabel.setInterceptsMouseClicks (false, false);
+    outTpLabel.setText ("OUT TP: -120.0 dBTP", juce::dontSendNotification);
+    addAndMakeVisible (outTpLabel);
+
+    lufsSLabel.setJustificationType (juce::Justification::centredLeft);
+    lufsSLabel.setFont (juce::Font (13.0f));
+    lufsSLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    lufsSLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    lufsSLabel.setInterceptsMouseClicks (false, false);
+    lufsSLabel.setText ("LUFS-S: -120.0", juce::dontSendNotification);
+    addAndMakeVisible (lufsSLabel);
+
+    lufsILabel.setJustificationType (juce::Justification::centredLeft);
+    lufsILabel.setFont (juce::Font (13.0f));
+    lufsILabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    lufsILabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    lufsILabel.setInterceptsMouseClicks (false, false);
+    lufsILabel.setText ("LUFS-I: -120.0", juce::dontSendNotification);
+    addAndMakeVisible (lufsILabel);
+
+    inPeakLabel.setJustificationType (juce::Justification::centredLeft);
+    inPeakLabel.setFont (juce::Font (13.0f));
+    inPeakLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    inPeakLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    inPeakLabel.setInterceptsMouseClicks (false, false);
+    inPeakLabel.setText ("IN PEAK: -120.0 dBFS", juce::dontSendNotification);
+    addAndMakeVisible (inPeakLabel);
+
+    outPeakLabel.setJustificationType (juce::Justification::centredLeft);
+    outPeakLabel.setFont (juce::Font (13.0f));
+    outPeakLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    outPeakLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    outPeakLabel.setInterceptsMouseClicks (false, false);
+    outPeakLabel.setText ("OUT PEAK: -120.0 dBFS", juce::dontSendNotification);
+    addAndMakeVisible (outPeakLabel);
+
+    ceilingLabel.setJustificationType (juce::Justification::centredLeft);
+    ceilingLabel.setFont (juce::Font (13.0f));
+    ceilingLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    ceilingLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    ceilingLabel.setInterceptsMouseClicks (false, false);
+    ceilingLabel.setText ("CEILING: -1.0 dBTP", juce::dontSendNotification);
+    addAndMakeVisible (ceilingLabel);
+
+    auto& vts = processor.getAPVTS();
+
+    driveA   = std::make_unique<APVTS::SliderAttachment> (vts, "drive", drive);
+    ceilingA = std::make_unique<APVTS::SliderAttachment> (vts, "ceiling", ceiling);
+    biasA    = std::make_unique<APVTS::ComboBoxAttachment> (vts, "adaptive_bias", adaptiveBias);
+    linkA    = std::make_unique<APVTS::SliderAttachment> (vts, "stereo_link", stereoLink);
+    osA      = std::make_unique<APVTS::ComboBoxAttachment> (vts, "oversampling_min", oversamplingMin);
+
+    startTimerHz (30);
+}
+
+void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
+{
+    const float current = processor.getCurrentGRDb();
+
+    grMeter.pushValueDb (current);
+    currentGrLabel.setText (juce::String::formatted ("%.1f dB", current), juce::dontSendNotification);
+
+    float inTp = -120.0f;
+    float outTp = -120.0f;
+    if (processor.getCurrentTruePeakDbTP (inTp, outTp))
+    {
+        inTp = juce::jmax (-120.0f, inTp);
+        outTp = juce::jmax (-120.0f, outTp);
+        inTpLabel.setText (juce::String::formatted ("IN TP: %.1f dBTP", inTp), juce::dontSendNotification);
+        outTpLabel.setText (juce::String::formatted ("OUT TP: %.1f dBTP", outTp), juce::dontSendNotification);
+    }
+
+    float lufsS = -120.0f;
+    float lufsI = -120.0f;
+    if (processor.getCurrentLufsDb (lufsS, lufsI))
+    {
+        lufsS = juce::jmax (-120.0f, lufsS);
+        lufsI = juce::jmax (-120.0f, lufsI);
+        lufsSLabel.setText (juce::String::formatted ("LUFS-S: %.1f", lufsS), juce::dontSendNotification);
+        lufsILabel.setText (juce::String::formatted ("LUFS-I: %.1f", lufsI), juce::dontSendNotification);
+    }
+
+    float inPk = -120.0f;
+    float outPk = -120.0f;
+    if (processor.getCurrentPeakDbFS (inPk, outPk))
+    {
+        inPk = juce::jmax (-120.0f, inPk);
+        outPk = juce::jmax (-120.0f, outPk);
+        inPeakLabel.setText (juce::String::formatted ("IN PEAK: %.1f dBFS", inPk), juce::dontSendNotification);
+        outPeakLabel.setText (juce::String::formatted ("OUT PEAK: %.1f dBFS", outPk), juce::dontSendNotification);
+    }
+
+    const float ceilDb = processor.getCurrentCeilingDbTP();
+    ceilingLabel.setText (juce::String::formatted ("CEILING: %.1f dBTP", ceilDb), juce::dontSendNotification);
+
+    grMeter.repaint();
+}
+
+void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
+{
+    g.fillAll (juce::Colours::black);
+
+    // Title
+    g.setColour (juce::Colours::white.withAlpha (0.85f));
+    g.setFont (14.0f);
+    g.drawText ("Compass Mastering Limiter", 16, 10, getWidth() - 32, 20, juce::Justification::left);
+
+    // Static labels (constitution: labeling for all visible controls)
+    auto drawLabelAbove = [&] (const juce::Component& c, const juce::String& label)
+    {
+        auto r = c.getBounds().translated (0, -18);
+        r.setHeight (16);
+        g.setColour (juce::Colours::white.withAlpha (0.70f));
+        g.setFont (12.5f);
+        g.drawText (label, r, juce::Justification::centred, false);
+    };
+
+    drawLabelAbove (drive,           "Drive");
+    drawLabelAbove (ceiling,         "Ceiling");
+    drawLabelAbove (adaptiveBias,    "Adaptive Bias");
+    drawLabelAbove (stereoLink,      "Stereo Link");
+    drawLabelAbove (oversamplingMin, "Oversampling Min");
+}
+
+void CompassMasteringLimiterAudioProcessorEditor::resized()
+{
+    auto b = getLocalBounds().reduced (16);
+    b.removeFromTop (30);
+
+    const int knob = 104;
+    const int gap  = 16;
+
+    auto row = b.removeFromTop (knob + 30);
+
+    drive.setBounds (row.removeFromLeft (knob));
+    row.removeFromLeft (gap);
+    ceiling.setBounds (row.removeFromLeft (knob));
+    row.removeFromLeft (gap);
+
+    adaptiveBias.setBounds (row.removeFromLeft (260).withTrimmedTop (34).withHeight (26));
+    row.removeFromLeft (gap);
+    stereoLink.setBounds (row.removeFromLeft (260).withTrimmedTop (34).withHeight (26));
+    row.removeFromLeft (gap);
+    oversamplingMin.setBounds (row.removeFromLeft (100).withTrimmedTop (34).withHeight (26));
+
+    b.removeFromTop (10);
+
+    // Primary meter zone (Verification): GR bar + numeric, then truth readouts below.
+    const int grH     = 32;
+    const int colW    = 220;
+    const int padX    = 10;
+    const int rowH    = 18;
+    const int rowGap  = 6;
+    const int topGap  = 10;
+
+    const int truthH  = (rowH * 4) + (rowGap * 3);   // 4 rows: TP, LUFS, PEAK, CEILING
+    const int zoneH   = grH + topGap + truthH;
+
+    auto meterZone = b.removeFromTop (zoneH);
+
+    grMeter.setBounds (meterZone.removeFromTop (grH));
+    auto m = grMeter.getBounds();
+
+    // GR numeric (right side of the bar zone)
+    currentGrLabel.setBounds (m.getRight() - 90, m.getY() + 6, 84, 18);
+
+    // Truth readouts grid (2-column, multi-row)
+    const int leftX  = m.getX() + padX;
+    const int rightX = m.getRight() - colW - padX;
+
+    const int y1 = meterZone.getY() + 6;             // Row 1
+    const int y2 = y1 + rowH + rowGap;               // Row 2
+    const int y3 = y2 + rowH + rowGap;               // Row 3
+    const int y4 = y3 + rowH + rowGap;               // Row 4 (Ceiling)
+
+    // Row 1: IN/OUT TP
+    inTpLabel.setBounds  (leftX,  y1, colW, rowH);
+    outTpLabel.setBounds (rightX, y1, colW, rowH);
+
+    // Row 2: LUFS-S / LUFS-I
+    lufsSLabel.setBounds (leftX,  y2, colW, rowH);
+    lufsILabel.setBounds (rightX, y2, colW, rowH);
+
+    // Row 3: IN/OUT PEAK
+    inPeakLabel.setBounds  (leftX,  y3, colW, rowH);
+    outPeakLabel.setBounds (rightX, y3, colW, rowH);
+
+    // Row 4: CEILING (full width)
+    ceilingLabel.setBounds (m.getX() + padX, y4, m.getWidth() - (2 * padX), rowH);
+}
+
+===== FILE: Source/Plugin/PluginEditor.h =====
+
+#pragma once
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <cmath>
+#include "PluginProcessor.h"
+
+class GRHistoryMeter final : public juce::Component
+{
+public:
+    void pushValueDb (float grDb) noexcept
+    {
+        if (! std::isfinite (grDb)) grDb = 0.0f;
+
+        // UI contract: GR is stereo authority in positive dB (0..range).
+        constexpr float kRangeDb = 24.0f;
+        lastGrDb = juce::jlimit (0.0f, kRangeDb, grDb);
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        auto r = getLocalBounds().toFloat().reduced (6.0f);
+
+        // Background
+        g.setColour (juce::Colours::white.withAlpha (0.10f));
+        g.fillRoundedRectangle (r, 8.0f);
+
+        // Filled bar (left -> right as GR increases)
+        constexpr float kRangeDb = 24.0f;
+        const float fill01 = juce::jlimit (0.0f, 1.0f, lastGrDb / kRangeDb);
+        auto fillR = r;
+        fillR.setWidth (r.getWidth() * fill01);
+
+        g.setColour (juce::Colours::white.withAlpha (0.60f));
+        g.fillRoundedRectangle (fillR, 8.0f);
+
+        // Label "GR"
+        auto labelR = r.reduced (10.0f, 6.0f);
+        g.setColour (juce::Colours::white.withAlpha (0.70f));
+        g.setFont (12.5f);
+        g.drawText ("GR", labelR.removeFromLeft (34.0f), juce::Justification::centredLeft, false);
+    }
+
+private:
+    float lastGrDb = 0.0f;
+};
+
+class CompassMasteringLimiterAudioProcessorEditor final
+    : public juce::AudioProcessorEditor
+    , private juce::Timer
+{
+public:
+    explicit CompassMasteringLimiterAudioProcessorEditor (CompassMasteringLimiterAudioProcessor&);
+    ~CompassMasteringLimiterAudioProcessorEditor() override = default;
+
+    void paint (juce::Graphics&) override;
+    void resized() override;
+
+private:
+    void timerCallback() override;
+
+    CompassMasteringLimiterAudioProcessor& processor;
+
+    juce::Slider drive;
+    juce::Slider ceiling;
+    juce::ComboBox adaptiveBias;
+    juce::Slider stereoLink;
+    juce::ComboBox oversamplingMin;
+
+    GRHistoryMeter grMeter;
+    juce::Label currentGrLabel;
+    juce::Label inTpLabel;
+    juce::Label outTpLabel;
+    juce::Label lufsSLabel;
+    juce::Label lufsILabel;
+
+    juce::Label inPeakLabel;
+    juce::Label outPeakLabel;
+    juce::Label ceilingLabel;
+
+    using APVTS = juce::AudioProcessorValueTreeState;
+    std::unique_ptr<APVTS::SliderAttachment> driveA;
+    std::unique_ptr<APVTS::SliderAttachment> ceilingA;
+    std::unique_ptr<APVTS::ComboBoxAttachment> biasA;
+    std::unique_ptr<APVTS::SliderAttachment> linkA;
+    std::unique_ptr<APVTS::ComboBoxAttachment> osA;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompassMasteringLimiterAudioProcessorEditor)
+};
+
+===== FILE: Source/Plugin/PluginProcessor.cpp =====
+
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
@@ -526,8 +880,7 @@ bool CompassMasteringLimiterAudioProcessor::readMeters (MeterSnapshot& out) cons
     const uint32_t seqNow  = meterSeq.load (std::memory_order_acquire);
     const uint32_t seqPrev = meterLastReadSeq.load (std::memory_order_relaxed);
 
-    // If nothing has ever been published, report "no data".
-    if (seqNow == 0u)
+    if (seqNow == seqPrev)
         return false;
 
     const uint32_t w = meterWriteIndex.load (std::memory_order_relaxed);
@@ -535,9 +888,7 @@ bool CompassMasteringLimiterAudioProcessor::readMeters (MeterSnapshot& out) cons
 
     out = meterRing[(size_t) idx];
 
-    // Only advance the "last read" marker when a new publish occurred.
-    if (seqNow != seqPrev)
-        meterLastReadSeq.store (seqNow, std::memory_order_relaxed);
+    meterLastReadSeq.store (seqNow, std::memory_order_relaxed);
 
     // Latest-snapshot policy: advance consumer index to keep producer's "ring full" test sane.
     meterReadIndex.store (w, std::memory_order_relaxed);
@@ -1306,3 +1657,364 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new CompassMasteringLimiterAudioProcessor();
 }
+
+===== FILE: Source/Plugin/PluginProcessor.h =====
+
+#pragma once
+#include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_audio_basics/juce_audio_basics.h>
+#include <juce_dsp/juce_dsp.h>
+#include <array>
+#include <memory>
+#include <atomic>
+#include <cstdint>
+
+class CompassMasteringLimiterAudioProcessor final : public juce::AudioProcessor
+{
+public:
+    using APVTS = juce::AudioProcessorValueTreeState;
+
+    CompassMasteringLimiterAudioProcessor();
+    ~CompassMasteringLimiterAudioProcessor() override = default;
+
+    void prepareToPlay (double sampleRate, int samplesPerBlock) override;
+    void releaseResources() override;
+
+    bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
+
+    void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    void processBlockBypassed (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+
+    juce::AudioProcessorEditor* createEditor() override;
+    bool hasEditor() const override { return true; }
+
+    const juce::String getName() const override { return "Compass Mastering Limiter"; }
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+    bool isMidiEffect() const override { return false; }
+    double getTailLengthSeconds() const override { return 0.0; }
+
+    int getNumPrograms() override { return 1; }
+    int getCurrentProgram() override { return 0; }
+    void setCurrentProgram (int) override {}
+    const juce::String getProgramName (int) override { return {}; }
+    void changeProgramName (int, const juce::String&) override {}
+
+    void getStateInformation (juce::MemoryBlock&) override;
+    void setStateInformation (const void*, int) override;
+
+    APVTS& getAPVTS() noexcept { return *apvts; }
+    const APVTS& getAPVTS() const noexcept { return *apvts; }
+
+    float getCurrentGRDb() const noexcept { return grDbForUI.load(std::memory_order_relaxed); }
+
+    bool getCurrentTruePeakDbTP (float& inDbTP, float& outDbTP) const noexcept
+    {
+        MeterSnapshot s{};
+        if (! readMeters (s))
+            return false;
+
+        const double inStereo  = juce::jmax (s.inTpDb[0],  s.inTpDb[1]);
+        const double outStereo = juce::jmax (s.outTpDb[0], s.outTpDb[1]);
+
+        const double inClamped  = juce::jlimit (-120.0, 60.0, inStereo);
+        const double outClamped = juce::jlimit (-120.0, 60.0, outStereo);
+
+        inDbTP  = (float) inClamped;
+        outDbTP = (float) outClamped;
+        return true;
+    }
+
+    bool getCurrentLufsDb (float& lufsS, float& lufsI) const noexcept
+    {
+        MeterSnapshot s{};
+        if (! readMeters (s))
+            return false;
+
+        const double sClamped = juce::jlimit (-120.0, 60.0, s.lufsShortDb);
+        const double iClamped = juce::jlimit (-120.0, 60.0, s.lufsIntDb);
+
+        lufsS = (float) sClamped;
+        lufsI = (float) iClamped;
+        return true;
+    }
+
+    bool getCurrentPeakDbFS (float& inDbFS, float& outDbFS) const noexcept
+    {
+        MeterSnapshot s{};
+        if (! readMeters (s))
+            return false;
+
+        const double inStereo  = juce::jmax (s.inPeakDb[0],  s.inPeakDb[1]);
+        const double outStereo = juce::jmax (s.outPeakDb[0], s.outPeakDb[1]);
+
+        const double inClamped  = juce::jlimit (-120.0, 60.0, inStereo);
+        const double outClamped = juce::jlimit (-120.0, 60.0, outStereo);
+
+        inDbFS  = (float) inClamped;
+        outDbFS = (float) outClamped;
+        return true;
+    }
+
+    float getCurrentCeilingDbTP() const noexcept
+    {
+        const float v = apvts->getRawParameterValue ("ceiling")->load();
+        return (float) juce::jlimit (-120.0f, 60.0f, v);
+    }
+
+private:
+    static APVTS::ParameterLayout createParameterLayout();
+
+    // Meter snapshot (POD, numeric-only). UI may consume via future plumbing.
+    // Step 1.1: declare the data structure only (no instances, no publication mechanism yet).
+    struct MeterSnapshot final
+    {
+        double   inPeakDb[2]   { 0.0, 0.0 };
+        double   outPeakDb[2]  { 0.0, 0.0 };
+
+        double   inTpDb[2]     { 0.0, 0.0 };
+        double   outTpDb[2]    { 0.0, 0.0 };
+
+        double   grDb[2]       { 0.0, 0.0 }; // attenuation magnitude in dB (0..+)
+        double   lufsShortDb   = 0.0;
+        double   lufsIntDb     = 0.0;
+
+        double   crestPreDb    = 0.0;
+        double   crestPostDb   = 0.0;
+
+        uint64_t frameCounter  = 0; // monotonic debug-only counter
+    };
+
+    // Meter publication primitive (SPSC ring, lock-free; declarations only in this step).
+    // Producer: audio thread. Consumer: UI thread.
+    //
+    // Publication rules:
+    // - Audio thread writes at a fixed cadence (e.g., every 256 or 512 samples).
+    // - If ring is full, new writes overwrite the oldest unread snapshot (consumer may miss frames).
+    // - UI reads opportunistically; missed frames are acceptable.
+    // - Snapshot is immutable once published (writer writes slot fully, then advances write index).
+    //
+    // Indices are modulo kMeterRingCapacity.
+    static constexpr uint32_t kMeterRingCapacity = 128; // fixed, no allocations
+    std::array<MeterSnapshot, (size_t) kMeterRingCapacity> meterRing {};
+
+    // writeIndex: next slot the producer will publish.
+    // readIndex:  next slot the consumer will read (advanced by consumer; may be forced forward on overwrite).
+    // meterSeq:   publication signal (incremented by producer AFTER a snapshot is fully written and published).
+    std::atomic<uint32_t> meterWriteIndex { 0u };
+    mutable std::atomic<uint32_t> meterReadIndex  { 0u };
+    std::atomic<uint32_t> meterSeq        { 0u }; // wraparound OK
+
+    // Consumer-side tracking for readMeters(): updated only by UI thread.
+    // Atomic is used defensively; keep usage contained to metering plumbing only.
+    mutable std::atomic<uint32_t> meterLastReadSeq { 0u };
+
+    void publishMeters (const MeterSnapshot& s) noexcept;
+    bool readMeters (MeterSnapshot& out) const noexcept;
+
+    // Meter accumulators (double precision) — Step 3.1 (storage only; no meter math/publishing yet)
+    double inPeakHold[2]  = { 0.0, 0.0 };
+    double outPeakHold[2] = { 0.0, 0.0 };
+    double inRmsSq[2]     = { 0.0, 0.0 };
+    double outRmsSq[2]    = { 0.0, 0.0 };
+    double inTpHold[2]    = { 0.0, 0.0 };
+    double outTpHold[2]   = { 0.0, 0.0 };
+    double grHoldDb[2]    = { 0.0, 0.0 }; // attenuation magnitude in dB (0..+)
+
+    // Meter publish timing (members) — configured/used in later steps
+    int    meterPublishSamples = 0;
+    int    meterCountdown      = 0;
+    double meterDt             = 0.0;
+
+    // Loudness state (Phase 11): deterministic, bounded, allocation-free.
+    // Short-term is a fixed 3.0 s window implemented as 150 chunks at the meter cadence (~50 Hz).
+    // Integrated is a running mean-square accumulator.
+    static constexpr int kLufsHz          = 50;
+    static constexpr int kLufsShortSec    = 3;
+    static constexpr int kLufsShortChunks = kLufsHz * kLufsShortSec; // 150 (fixed, no allocations)
+
+    std::array<double, (size_t) kLufsShortChunks> lufsChunkE {};
+    uint32_t lufsChunkWrite  = 0u;
+    uint32_t lufsChunkFilled = 0u;
+    double   lufsShortSumE   = 0.0;
+
+    double   lufsCurChunkE   = 0.0;
+    int      lufsCurChunkN   = 0;
+
+    double   lufsIntSumE     = 0.0;
+    uint64_t lufsIntN        = 0u;
+
+    // Gate-3 deterministic state model:
+    void reset (double sampleRate, int maxBlock, int channels) noexcept;
+
+    // Oversampling + True Peak (Gate-4):
+    // - FIR polyphase only (linear-phase reconstruction)
+    // - Oversampling is prebuilt in prepareToPlay (no allocations in audio thread)
+    // - Active oversampling selection changes only on transport stop/start edge
+    void prepareOversampling (int channels, int maxBlock);
+    void selectOversamplingAtBoundary (int osMinIndex) noexcept;
+    void measureTruePeak (const juce::AudioBuffer<float>& buffer) noexcept;
+
+    // Phase D: promoted helpers (no allocations, no virtual dispatch)
+    static double onePoleAlpha (double tauSec, double dtSec) noexcept;
+    void processOneSample (float* const* chPtr,
+                          int numCh,
+                          int i,
+                          double dt,
+                          double driveDb,
+                          double ceilingDb,
+                          double bias01,
+                          double link01,
+                          double& grDbNegMin) noexcept;
+
+    // Gate-2 smoothing policy (declared now; configured in prepareToPlay/reset):
+    // - Drive/Ceiling: sample-accurate linear ramps (SmoothedValue)
+    // - Stereo Link / Adaptive Bias: smoothed (SmoothedValue)
+    // - Oversampling Min: discrete choice (no smoothing)
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> driveDbSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> ceilingDbSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> adaptiveBias01Smoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> stereoLink01Smoothed;
+
+    // Deterministic lifecycle context (captured in prepareToPlay/reset):
+    double lastSampleRate = 0.0;
+    double lastInvSampleRate = 0.0; // cached 1 / lastSampleRate (SR-derived coeff scalar)
+    double effectiveControlInvDt = 0.0; // 1.0 / nativeSR
+    double effectiveAudioInvDt   = 0.0; // 1.0 / (nativeSR * OSFactor); OSFactor=1.0 for now
+    int lastMaxBlock = 0;
+    int lastChannels = 0;
+
+    // Transport edge detection (stop/start triggers reset semantics):
+    bool transportKnown = false;
+    bool lastTransportPlaying = false;
+
+    // Oversampling (prebuilt instances; selected at transport-safe boundary only)
+    static constexpr int kOsCount = 3; // 2x / 4x / 8x
+    std::array<std::unique_ptr<juce::dsp::Oversampling<float>>, kOsCount> oversamplers;
+    juce::dsp::Oversampling<float>* activeOversampler = nullptr;
+    std::array<int, kOsCount> oversamplerLatencySamples { 0, 0, 0 };
+    int latchedOsMinIndex = 0; // 0=2x, 1=4x, 2=8x (latched only at boundary)
+
+    // Control-domain true peak (linear)
+    double truePeakLin = 0.0;
+
+    // Phase 1.2 — True-Peak Detector Path (Reference)
+    // Polyphase FIR oversampled reconstruction (linear-phase, deterministic coefficients).
+    // Implemented as 4x interpolation; coefficients are symmetric (linear-phase) and normalized so sum(h) == 4.0.
+    static constexpr int kTpOSFactor = 4;
+    static constexpr int kTpTaps     = 32; // must be even and divisible by kTpOSFactor
+
+    static constexpr std::array<double, kTpTaps> kTpFIR {
+        -0.000000000000000000e+00,
+        -8.291365655703771638e-04,
+        -3.525756966746731828e-03,
+        -3.488316484777266926e-03,
+         6.579729475753049242e-03,
+         2.634752184268256830e-02,
+         4.035166818965605501e-02,
+         2.428673766138198312e-02,
+        -3.407969929110992585e-02,
+        -1.130051644440947245e-01,
+        -1.538132119698306655e-01,
+        -8.715260485310091787e-02,
+         1.222467629501392816e-01,
+         4.403366958529203457e-01,
+         7.651370491704410082e-01,
+         9.706077254322565961e-01,
+         9.706077254322565961e-01,
+         7.651370491704410082e-01,
+         4.403366958529203457e-01,
+         1.222467629501392955e-01,
+        -8.715260485310093175e-02,
+        -1.538132119698306377e-01,
+        -1.130051644440948078e-01,
+        -3.407969929110995361e-02,
+         2.428673766138198312e-02,
+         4.035166818965605501e-02,
+         2.634752184268256830e-02,
+         6.579729475753050977e-03,
+        -3.488316484777266926e-03,
+        -3.525756966746731828e-03,
+        -8.291365655703861626e-04,
+        -0.000000000000000000e+00
+    };
+
+    // Per-channel FIR history (preallocated; 2-channel accumulator contract).
+    std::array<std::array<double, kTpTaps>, 2> tpHist{};
+    std::array<int, 2> tpHistPos{};
+
+    // Detector-domain transient feature:
+    // First-order temporal derivative of peak magnitude (linear), per channel, per block.
+    std::array<double, 2> prevTpChLin { 0.0, 0.0 };
+    std::array<double, 2> tpDerivLin  { 0.0, 0.0 };
+
+    // Phase 1.2 — Sustained energy accumulator (detector domain):
+    // Broadband power EMA of reconstructed samples (double), per channel.
+    // Decay law is locked: a = exp(-dt/tau) via onePoleAlpha(tau, dt).
+    static constexpr double kTpSustainedTauSec = 0.040;
+    std::array<double, 2> tpSustainedPowEma { 0.0, 0.0 };
+
+    void resetTruePeakDetector() noexcept
+    {
+        for (int c = 0; c < 2; ++c)
+        {
+            tpHist[(size_t) c].fill (0.0);
+            tpHistPos[(size_t) c] = 0;
+
+            prevTpChLin[(size_t) c] = 0.0;
+            tpDerivLin[(size_t) c]  = 0.0;
+            tpSustainedPowEma[(size_t) c] = 0.0;
+        }
+    }
+
+    // UI meter readout (GR in dB, negative: 0..-60). Published once per block (atomic, lock-free).
+    std::atomic<float> grDbForUI { 0.0f };
+
+
+    // Output scalar continuity (tiny, deterministic) — prevents micro-steps reaching the output
+    std::array<float, 2> lastOutScalar { 1.0f, 1.0f };
+    // Guards + Safety Rails (Gate-10):
+    // - Hard bounds: attenuation depth already clamped via kMaxAttnDb in processBlock
+    // - Slew limiting: prevents extreme step changes from bad automation or math glitches
+    std::array<double, 2> lastAppliedAttnDb { 0.0, 0.0 };
+
+    // Tiny GR floor + hysteresis memory (per-channel) to prevent threshold chatter (observational behavior unchanged)
+    std::array<double, 2> lastAttnTargetDb { 0.0, 0.0 };
+
+    // CPU overload behavior: temporarily disable non-essential measurement extras (never changes user settings)
+    int overloadAssistBlocks = 0;
+
+    // NaN/Inf containment latch (release): if tripped, block output is forced safe and internal state resets
+    bool badMathThisBlock = false;
+
+    // Envelope system (Micro + Macro, coupled)
+    // Micro: critically damped 2nd-order model (no overshoot; ultra-fast capture; no ringing)
+    // Discrete-time implementation: two cascaded one-pole followers (stable for any dt; no stiffness).
+    // Macro: energy accumulation + exponential decay (bounded; monotonic)
+    // Coupling: macro state influences micro recovery behavior (no competing control paths)
+    std::array<double, 2> microStage1DbState { 0.0, 0.0 };
+    std::array<double, 2> microStage2DbState { 0.0, 0.0 };
+    std::array<double, 2> macroEnergyState   { 0.0, 0.0 };
+
+    // Gate: Adaptive Release inputs (deterministic, bounded, continuous)
+    // - Crest factor proxy: short RMS energy accumulator (per-channel)
+    // - Event density: continuous "event presence" accumulator (per-channel)
+    std::array<double, 2> crestRmsSqState    { 0.0, 0.0 };
+    std::array<double, 2> eventDensityState  { 0.0, 0.0 };
+
+    // Spectral Guardrails (measurement-only; broadband application)
+    // Parallel measurement path:
+    // - frequency-selective measurement allowed
+    // - must not influence detector/envelope timing/shape
+    // - may only add subtle broadband GR under heavy limiting
+    std::array<double, 2> guardLpState { 0.0, 0.0 }; // one-pole LP state for split
+    std::array<double, 2> guardTotE   { 0.0, 0.0 }; // total energy EMA
+    std::array<double, 2> guardHiE    { 0.0, 0.0 }; // high-band energy EMA
+
+    // Scratch buffer for oversampled measurement (double precision)
+    juce::AudioBuffer<float> workBufferFloat;
+
+    std::unique_ptr<APVTS> apvts;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompassMasteringLimiterAudioProcessor)
+};
