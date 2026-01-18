@@ -312,8 +312,17 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
         const double energyInput = juce::jmax (0.0, std::pow (10.0, attnTargetDb / 20.0) - 1.0);
 
         const double macroSec = kMacroSecBase * (1.20 - 0.40 * bias01);
-        const double aM = onePoleAlpha (macroSec, dt);
-        macroEnergyState[(size_t) c] = aM * macroEnergyState[(size_t) c] + (1.0 - aM) * energyInput;
+        const double aM = std::exp (-dt / macroSec);
+
+        const double Eprev = macroEnergyState[(size_t) c];
+        const double u = energyInput;
+
+        double Enext = aM * Eprev + (1.0 - aM) * u;
+
+        Enext = juce::jlimit (juce::jmin (Eprev, u), juce::jmax (Eprev, u), Enext);
+        Enext = juce::jmax (0.0, Enext);
+
+        macroEnergyState[(size_t) c] = Enext;
 
         const double macro01 = macroEnergyState[(size_t) c] / (1.0 + macroEnergyState[(size_t) c]);
         const double sustained01 = juce::jlimit (0.0, 1.0, macro01);
@@ -349,16 +358,63 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
 
         const double microSec = kMicroSecMin + (kMicroSecMax - kMicroSecMin) * (1.0 - resp01);
 
-        const double aU = onePoleAlpha (microSec, dt);
+        // Micro envelope (Phase 1.3): critically damped 2nd-order system (state-space), Forward Euler.
+        // States: x1 = position-like (envelope dB), x2 = velocity-like (dB/s).
+        double x1 = microStage1DbState[(size_t) c];
+        double x2 = microStage2DbState[(size_t) c];
 
-        microStage1DbState[(size_t) c] = aU * microStage1DbState[(size_t) c] + (1.0 - aU) * attnTargetDb;
-        microStage2DbState[(size_t) c] = aU * microStage2DbState[(size_t) c] + (1.0 - aU) * microStage1DbState[(size_t) c];
+        // Overshoot prohibited (Phase 1.3 enforcement): fixed absolute epsilon in dB.
+        constexpr double epsDb = 1.0e-9;
 
-        double y1 = microStage2DbState[(size_t) c];
-        y1 = juce::jlimit (0.0, kMaxAttnDb, y1);
-        microStage2DbState[(size_t) c] = y1;
+        const double yPrev = x1;
+        const double xT = attnTargetDb;
 
-        attnDbCh[(size_t) c] = y1;
+        const double microSecBase = microSec;
+
+        constexpr double kCoupleMin = 1.0;
+        constexpr double kCoupleMax = 3.0;
+
+        const bool isRelease = (xT < yPrev - epsDb);
+
+        const double couple = kCoupleMin + (kCoupleMax - kCoupleMin) * macro01;
+        const double microSecEff = isRelease ? (microSecBase * couple) : microSecBase;
+
+        const double omega0 = 1.0 / microSecEff;
+
+        const double dx1_dt = x2;
+        const double dx2_dt = (omega0 * omega0) * (xT - x1) - 2.0 * omega0 * x2;
+
+        x1 += dt * dx1_dt;
+        x2 += dt * dx2_dt;
+
+        // Enforce monotonic convergence without crossing the target (saturate to target only).
+        double yNext = x1;
+        if (std::abs (xT - yPrev) <= epsDb)
+        {
+            yNext = xT;
+        }
+        else if (xT > yPrev)
+        {
+            yNext = juce::jmin (yNext, xT);
+        }
+        else if (xT < yPrev)
+        {
+            yNext = juce::jmax (yNext, xT);
+        }
+
+        x1 = yNext;
+
+        // Downstream clamp(s) (existing) apply after enforcement.
+        x1 = juce::jlimit (0.0, kMaxAttnDb, x1);
+
+        // Velocity clamp (safety): prevents runaway under extreme dt/tau conditions.
+        constexpr double kMaxVelDbPerSec = 600.0;
+        x2 = juce::jlimit (-kMaxVelDbPerSec, kMaxVelDbPerSec, x2);
+
+        microStage1DbState[(size_t) c] = x1;
+        microStage2DbState[(size_t) c] = x2;
+
+        attnDbCh[(size_t) c] = x1;
     }
 
     if (numCh > 2)
