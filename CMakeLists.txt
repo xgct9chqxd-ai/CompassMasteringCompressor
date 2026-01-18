@@ -6,6 +6,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_subdirectory(JUCE)
 
+add_subdirectory(reference_core EXCLUDE_FROM_ALL)
+add_subdirectory(reference_harness EXCLUDE_FROM_ALL)
+add_subdirectory(reference_tests EXCLUDE_FROM_ALL)
+
 juce_add_plugin(CompassMasteringLimiter
     COMPANY_NAME "Compass"
     IS_SYNTH FALSE

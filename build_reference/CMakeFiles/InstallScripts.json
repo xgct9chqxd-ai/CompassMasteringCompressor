@@ -1,0 +1,14 @@
+{
+	"InstallScripts" : 
+	[
+		"/Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter/build_reference/cmake_install.cmake",
+		"/Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter/build_reference/JUCE/cmake_install.cmake",
+		"/Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter/build_reference/JUCE/modules/cmake_install.cmake",
+		"/Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter/build_reference/JUCE/extras/Build/cmake_install.cmake",
+		"/Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter/build_reference/JUCE/extras/Build/juceaide/cmake_install.cmake",
+		"/Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter/build_reference/reference_core/cmake_install.cmake",
+		"/Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter/build_reference/reference_harness/cmake_install.cmake",
+		"/Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter/build_reference/reference_tests/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

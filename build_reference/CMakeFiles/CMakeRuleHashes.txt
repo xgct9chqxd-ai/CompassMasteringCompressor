@@ -1,0 +1,2 @@
+# Hashes of file build rules.
+2c777eaeb445ced0c4fe3a65b754f160 CompassMasteringLimiter_artefacts/JuceLibraryCode/CompassMasteringLimiter_VST3/PkgInfo
