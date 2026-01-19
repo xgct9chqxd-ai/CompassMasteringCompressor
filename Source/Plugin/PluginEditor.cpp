@@ -15,15 +15,166 @@ static void setRotary (juce::Slider& s)
     s.setColour (juce::Slider::textBoxBackgroundColourId,   juce::Colours::transparentBlack);
 }
 
+class CompassKnobLookAndFeel final : public juce::LookAndFeel_V4
+{
+public:
+    void drawRotarySlider (juce::Graphics& g,
+                           int x, int y, int width, int height,
+                           float sliderPosProportional,
+                           float rotaryStartAngle,
+                           float rotaryEndAngle,
+                           juce::Slider& slider) override
+    {
+        const auto knobBounds = juce::Rectangle<float> ((float) x, (float) y, (float) width, (float) height);
+        const float cx = knobBounds.getCentreX();
+        const float cy = knobBounds.getCentreY();
+        const float r  = juce::jmin (knobBounds.getWidth(), knobBounds.getHeight()) * 0.5f;
+
+        const juce::Colour cDarkMid (0xFF2A2A2A);
+        const juce::Colour cDark    (0xFF111111);
+        const juce::Colour cBlack   (0xFF000000);
+        const juce::Colour cRim     (0xFF333333);
+
+        const float ro = r - 0.5f;
+
+        // Knob fill (radial gradient)
+        if (ro > 0.0f)
+        {
+            const float gx = cx - 0.1f * r;
+            const float gy = cy - 0.1f * r;
+
+            juce::ColourGradient grad (cDarkMid, gx, gy, cBlack, cx, cy, true);
+            grad.addColour (0.70, cDark);
+
+            g.setGradientFill (grad);
+            g.fillEllipse (cx - ro, cy - ro, 2.0f * ro, 2.0f * ro);
+        }
+
+        // Edge ticks (static)
+        if (r > 0.0f)
+        {
+            constexpr int   tickCount = 48;
+            constexpr float tickLen   = 8.0f;
+            constexpr float tickW     = 1.0f;
+            constexpr float tickAlpha = 0.55f;
+
+            const float tickOuter = r - 2.0f;
+            const float tickInner = tickOuter - tickLen;
+
+            if (tickInner > 0.0f && tickOuter > tickInner)
+            {
+                g.setColour (juce::Colours::white.withAlpha (tickAlpha));
+
+                const float startA = rotaryStartAngle;
+                const float endA   = rotaryEndAngle;
+                const float rotA   = juce::MathConstants<float>::halfPi + juce::MathConstants<float>::pi; // 90 + 180 degrees
+
+                for (int i = 0; i < tickCount; ++i)
+                {
+                    const float t = (float) i / (float) (tickCount - 1);
+                    const float aBase = startA + t * (endA - startA);
+                    const float a = aBase + rotA;
+
+                    const float dx = std::cos (a);
+                    const float dy = std::sin (a);
+
+                    const float x1 = cx + tickInner * dx;
+                    const float y1 = cy + tickInner * dy;
+                    const float x2 = cx + tickOuter * dx;
+                    const float y2 = cy + tickOuter * dy;
+
+                    g.drawLine (x1, y1, x2, y2, tickW);
+                }
+            }
+        }
+
+        // Subtle rim stroke
+        if (ro > 0.0f)
+        {
+            g.setColour (cRim);
+            g.drawEllipse (cx - ro, cy - ro, 2.0f * ro, 2.0f * ro, 1.0f);
+        }
+
+        // Inner shadow (top bias)
+        {
+            const float rr = r - 2.0f;
+            if (rr > 0.0f)
+            {
+                juce::ColourGradient sh (juce::Colours::black.withAlpha (0.80f),
+                                        cx, cy - rr,
+                                        juce::Colours::transparentBlack,
+                                        cx, cy,
+                                        false);
+                g.setGradientFill (sh);
+                g.fillEllipse (cx - rr, cy - rr, 2.0f * rr, 2.0f * rr);
+            }
+        }
+
+        // Faint highlight (bottom bias)
+        {
+            const float rr = r - 2.0f;
+            if (rr > 0.0f)
+            {
+                juce::ColourGradient hi (juce::Colours::transparentWhite,
+                                        cx, cy,
+                                        juce::Colours::white.withAlpha (0.05f),
+                                        cx, cy + rr,
+                                        false);
+                g.setGradientFill (hi);
+                g.fillEllipse (cx - rr, cy - rr, 2.0f * rr, 2.0f * rr);
+            }
+        }
+
+        // Indicator (line) — replaces JUCE dot/pointer; mapping unchanged.
+        const float angle = rotaryStartAngle
+                          + sliderPosProportional * (rotaryEndAngle - rotaryStartAngle);
+
+        const float lineW     = 3.0f;
+        const float lineLen   = 0.9f * r;       // 45% of diameter
+        const float lineInset = 0.10f * r;      // gap from center
+        const float lineR     = 2.0f;
+
+        // Subtle glow (no blur): one outer pass, then main pass.
+        {
+            juce::Path glow;
+            glow.addRoundedRectangle (-0.5f * (lineW + 2.0f),
+                                      -(lineInset + lineLen),
+                                      (lineW + 2.0f),
+                                      lineLen,
+                                      lineR + 1.0f);
+
+            g.setColour (juce::Colours::white.withAlpha (0.10f));
+            g.fillPath (glow, juce::AffineTransform::rotation (angle).translated (cx, cy));
+        }
+
+        {
+            juce::Path line;
+            line.addRoundedRectangle (-0.5f * lineW,
+                                      -(lineInset + lineLen),
+                                      lineW,
+                                      lineLen,
+                                      lineR);
+
+            auto col = slider.findColour (juce::Slider::thumbColourId);
+            g.setColour (col.isTransparent() ? juce::Colours::white.withAlpha (0.90f) : col);
+            g.fillPath (line, juce::AffineTransform::rotation (angle).translated (cx, cy));
+        }
+    }
+};
+
 CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcessorEditor (CompassMasteringLimiterAudioProcessor& p)
 : juce::AudioProcessorEditor (&p), processor (p)
 {
     setSize (900, 420);
 
+    knobLnf = std::make_unique<CompassKnobLookAndFeel>();
+
     setRotary (drive);
+    drive.setLookAndFeel (knobLnf.get());
     addAndMakeVisible (drive);
 
     setRotary (ceiling);
+    ceiling.setLookAndFeel (knobLnf.get());
     addAndMakeVisible (ceiling);
     adaptiveBias.addItem ("Transparent", 1);
     adaptiveBias.addItem ("Balanced", 2);
@@ -109,6 +260,7 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
 
     // Trim knob setup
     setRotary (trim);
+    trim.setLookAndFeel (knobLnf.get());
     addAndMakeVisible (trim);
 
     trimLabel.setText ("Trim", juce::dontSendNotification);
@@ -152,6 +304,15 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
 
     startTimerHz (30);
 }
+
+CompassMasteringLimiterAudioProcessorEditor::~CompassMasteringLimiterAudioProcessorEditor()
+{
+    drive.setLookAndFeel (nullptr);
+    ceiling.setLookAndFeel (nullptr);
+    trim.setLookAndFeel (nullptr);
+    knobLnf.reset();
+}
+
 
 void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
 {
@@ -234,7 +395,7 @@ void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
 void CompassMasteringLimiterAudioProcessorEditor::resized()
 {
     // Local geometry constants (single source of truth for this layout function)
-    const int knobSize        = 100;
+    const int knobSize        = 140;
     const int knobGap         = 15;
     const int knobRowExtraH   = 40;
     const int valueLabelDY    = 4;
@@ -293,7 +454,7 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
     // Top: three knob columns (identical) inside bandKnobs
     const int colGap     = 18;
     const int labelAreaH = 24;
-    const int knobAreaH  = 86;
+    const int knobAreaH  = knobSize;
     const int valueAreaH = 30;
 
     auto cols = bandKnobs;
@@ -318,19 +479,19 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
     {
         auto [labelArea, knobArea, valueArea] = makeAreas (col1);
         (void) labelArea;
-        trim.setBounds (knobArea);
+        trim.setBounds (knobArea.withSizeKeepingCentre (knobSize, knobSize));
         trimValueLabel.setBounds (valueArea);
     }
     {
         auto [labelArea, knobArea, valueArea] = makeAreas (col2);
         (void) labelArea;
-        drive.setBounds (knobArea);
+        drive.setBounds (knobArea.withSizeKeepingCentre (knobSize, knobSize));
         glueValueLabel.setBounds (valueArea);
     }
     {
         auto [labelArea, knobArea, valueArea] = makeAreas (col3);
         (void) labelArea;
-        ceiling.setBounds (knobArea);
+        ceiling.setBounds (knobArea.withSizeKeepingCentre (knobSize, knobSize));
         ceilingValueLabel.setBounds (valueArea);
     }
 
