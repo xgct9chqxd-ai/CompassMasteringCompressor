@@ -202,6 +202,40 @@ void CompassMasteringLimiterAudioProcessor::reset (double sampleRate, int maxBlo
     eventDensityState  = { 0.0, 0.0 };
 
     lastOutScalar = { 1.0f, 1.0f };
+
+    // Ceiling envelope (state + coeffs) — computed here (SR-dependent), never in processBlock.
+    for (int c = 0; c < 2; ++c)
+        ceilingGainState[c] = 1.0f;
+
+    {
+        // Step 3.1 — Envelope SR domain: must match the loop where ceiling is enforced.
+        // Ceiling enforcement runs inside processOneSample(), which is called at:
+        // - Oversampled rate when canOsAudio == true
+        // - Native rate otherwise
+        float srEnv = (float) juce::jmax (1.0, lastSampleRate);
+        if (activeOversampler != nullptr)
+        {
+            const int osFactor = juce::jmax (1, (int) activeOversampler->getOversamplingFactor());
+            srEnv = (float) juce::jmax (1.0, lastSampleRate * (double) osFactor);
+        }
+
+        // Step 3.2 — ms -> tau (seconds), with safety clamps
+        const float tauDown = juce::jmax (1.0e-5f, ceilingAttackMs  * 0.001f);
+        const float tauUp   = juce::jmax (1.0e-5f, ceilingReleaseMs * 0.001f);
+
+        float aDown = std::expf (-1.0f / (tauDown * srEnv));
+        float aUp   = std::expf (-1.0f / (tauUp   * srEnv));
+
+        if (! std::isfinite ((double) aDown)) aDown = 0.0f;
+        if (! std::isfinite ((double) aUp))   aUp   = 0.0f;
+
+        // Clamp to (0, 1)
+        aDown = juce::jlimit (1.0e-6f, 0.999999f, aDown);
+        aUp   = juce::jlimit (1.0e-6f, 0.999999f, aUp);
+
+        ceilA_down = aDown;
+        ceilA_up   = aUp;
+    }
 }
 
 void CompassMasteringLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -868,7 +902,7 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
     lastOutScalar[1] = gR;
 
     constexpr float kEpsAbs = 1.0e-12f;
-    constexpr float kSoftClipK = 0.02f;
+    constexpr float kSoftClipK = 1.5f;
     float ceilingLin = (float) std::pow (10.0, ceilingDb / 20.0);
     if (! std::isfinite ((double) ceilingLin) || ceilingLin <= 0.0f)
         ceilingLin = 0.0f;
@@ -882,9 +916,23 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
 
         if (ceilingLin > 0.0f)
         {
+            const float a = std::abs (y);
+            float gReq = (a > kEpsAbs ? (ceilingLin / a) : 1.0f);
+            if (! std::isfinite ((double) gReq)) gReq = 1.0f;
+            gReq = juce::jlimit (0.0f, 1.0f, gReq);
+
+            const float gCeil = stepCeilingEnv (gReq, ceilingGainState[0], ceilA_down, ceilA_up);
+            y *= gCeil;
+
             const float u = y / ceilingLin;
             if (std::abs (u) > 1.0f)
-                y = ceilingLin * std::tanh (u * kSoftClipK) / kSoftClipK;
+                y = ceilingLin * std::tanh (u * kSoftClipK);
+
+            constexpr float kHardMargin = 1.005f;
+            const float hardLim = ceilingLin * kHardMargin;
+            const float ay = std::abs (y);
+            if (ay > hardLim && ay > 0.0f)
+                y = (y / ay) * hardLim;
         }
 
         if (! std::isfinite ((double) y)) y = 0.0f;
@@ -900,9 +948,23 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
 
         if (ceilingLin > 0.0f)
         {
+            const float a = std::abs (y);
+            float gReq = (a > kEpsAbs ? (ceilingLin / a) : 1.0f);
+            if (! std::isfinite ((double) gReq)) gReq = 1.0f;
+            gReq = juce::jlimit (0.0f, 1.0f, gReq);
+
+            const float gCeil = stepCeilingEnv (gReq, ceilingGainState[1], ceilA_down, ceilA_up);
+            y *= gCeil;
+
             const float u = y / ceilingLin;
             if (std::abs (u) > 1.0f)
-                y = ceilingLin * std::tanh (u * kSoftClipK) / kSoftClipK;
+                y = ceilingLin * std::tanh (u * kSoftClipK);
+
+            constexpr float kHardMargin = 1.005f;
+            const float hardLim = ceilingLin * kHardMargin;
+            const float ay = std::abs (y);
+            if (ay > hardLim && ay > 0.0f)
+                y = (y / ay) * hardLim;
         }
 
         if (! std::isfinite ((double) y)) y = 0.0f;
@@ -918,9 +980,23 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
 
         if (ceilingLin > 0.0f)
         {
+            const float a = std::abs (y);
+            float gReq = (a > kEpsAbs ? (ceilingLin / a) : 1.0f);
+            if (! std::isfinite ((double) gReq)) gReq = 1.0f;
+            gReq = juce::jlimit (0.0f, 1.0f, gReq);
+
+            const float gCeil = stepCeilingEnv (gReq, ceilingGainState[1], ceilA_down, ceilA_up);
+            y *= gCeil;
+
             const float u = y / ceilingLin;
             if (std::abs (u) > 1.0f)
-                y = ceilingLin * std::tanh (u * kSoftClipK) / kSoftClipK;
+                y = ceilingLin * std::tanh (u * kSoftClipK);
+
+            constexpr float kHardMargin = 1.005f;
+            const float hardLim = ceilingLin * kHardMargin;
+            const float ay = std::abs (y);
+            if (ay > hardLim && ay > 0.0f)
+                y = (y / ay) * hardLim;
         }
 
         if (! std::isfinite ((double) y)) y = 0.0f;
@@ -1056,6 +1132,9 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
                 const int ch = juce::jmax (getTotalNumInputChannels(), getTotalNumOutputChannels());
                 reset (lastSampleRate, lastMaxBlock, ch);
 
+                ceilingGainState[0] = 1.0f;
+                ceilingGainState[1] = 1.0f;
+
                 // Transport-safe boundary: latch oversampling selection (no allocations here).
                 const int osMinIndexBoundary = (int) apvts->getRawParameterValue ("oversampling_min")->load();
                 selectOversamplingAtBoundary (osMinIndexBoundary);
@@ -1071,6 +1150,9 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
 
         const int ch = juce::jmax (getTotalNumInputChannels(), getTotalNumOutputChannels());
         reset (lastSampleRate, lastMaxBlock, ch);
+
+        ceilingGainState[0] = 1.0f;
+        ceilingGainState[1] = 1.0f;
 
         const int osMinIndexBoundary = (int) apvts->getRawParameterValue ("oversampling_min")->load();
         selectOversamplingAtBoundary (osMinIndexBoundary);

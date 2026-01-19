@@ -217,6 +217,16 @@ private:
     // Phase D: promoted helpers (no allocations, no virtual dispatch)
     static double onePoleAlpha (double tauSec, double dtSec) noexcept;
 
+    // Step 5 — Ceiling envelope helper (gain domain, per-sample)
+    static inline float stepCeilingEnv (float gReq, float& state, float aDown, float aUp) noexcept
+    {
+        gReq = juce::jlimit (0.0f, 1.0f, gReq);
+        const float a = (gReq < state ? aDown : aUp);
+        const float aClamped = juce::jlimit (1.0e-6f, 0.999999f, a);
+        state = aClamped * state + (1.0f - aClamped) * gReq;
+        return state;
+    }
+
     // Phase 1.x — Hot-path exp/log acceleration (tables precomputed in prepareToPlay; no lazy init)
     static constexpr int    kExpTableSize = 8192;
     static constexpr double kExpMaxX      = 0.1;   // x = dt/tau domain clamp
@@ -350,6 +360,17 @@ private:
 
     // Output scalar continuity (tiny, deterministic) — prevents micro-steps reaching the output
     std::array<float, 2> lastOutScalar { 1.0f, 1.0f };
+
+    // Step 1.1 — Per-channel ceiling envelope state (2-channel accumulator contract)
+    float ceilingGainState[2] = { 1.0f, 1.0f };
+
+    // Step 1.2 — Ceiling envelope coefficients (1-pole smoothing)
+    float ceilA_down = 0.0f;  // gain decreasing
+    float ceilA_up   = 0.0f;  // gain increasing
+
+    // Step 2 — Ceiling envelope time constants (defaults; ms)
+    float ceilingAttackMs  = 0.2f;   // fast catch, avoids overshoot
+    float ceilingReleaseMs = 30.0f;  // smooth recovery
 
     // Phase 1.9 — Bypass crossfade (sample-accurate, no resets on bypass edges)
     float bypassMix = 1.0f; // 1=wet, 0=dry

@@ -19,16 +19,349 @@ static void setRotary (juce::Slider& s)
     s.setColour (juce::Slider::textBoxBackgroundColourId,   juce::Colours::transparentBlack);
 }
 
+class CompassKnobLookAndFeel final : public juce::LookAndFeel_V4
+{
+public:
+    void drawRotarySlider (juce::Graphics& g,
+                           int x, int y, int width, int height,
+                           float sliderPosProportional,
+                           float rotaryStartAngle,
+                           float rotaryEndAngle,
+                           juce::Slider& slider) override
+    {
+        const auto knobBounds = juce::Rectangle<float> ((float) x, (float) y, (float) width, (float) height);
+        drawMachinedKnob (g, knobBounds, sliderPosProportional, rotaryStartAngle, rotaryEndAngle, slider);
+    }
+
+private:
+    void drawMachinedKnob (juce::Graphics& g,
+                           juce::Rectangle<float> knobBounds,
+                           float sliderPosProportional,
+                           float rotaryStartAngle,
+                           float rotaryEndAngle,
+                           juce::Slider& slider)
+    {
+        const float cx = knobBounds.getCentreX();
+        const float cy = knobBounds.getCentreY();
+        const float r  = juce::jmin (knobBounds.getWidth(), knobBounds.getHeight()) * 0.5f;
+
+        const auto boundsF = knobBounds;
+        const float radiusBase = boundsF.getWidth() * 0.5f;
+
+        const float clipInset    = juce::jlimit (0.0f, radiusBase * 0.10f, radiusBase * 0.06f);
+        const float shadowDy     = juce::jlimit (0.0f, radiusBase * 0.10f, radiusBase * 0.03f);
+        const float faceInset    = juce::jlimit (0.0f, radiusBase * 0.10f, radiusBase * 0.06f);
+        const float aoInset      = juce::jlimit (0.0f, radiusBase * 0.10f, radiusBase * 0.03f);
+        const float rimThickness = juce::jlimit (radiusBase * 0.10f, radiusBase * 0.15f, radiusBase * 0.12f);
+
+        const auto outer      = boundsF.reduced (clipInset);
+        const auto shadowRect = outer.translated (0.0f, shadowDy);
+        const auto rimOuter   = outer;
+        const auto rimInner   = rimOuter.reduced (rimThickness);
+        const auto face       = rimInner.reduced (faceInset);
+        const auto aoRing     = rimInner.reduced (aoInset);
+
+        const auto center = face.getCentre();
+        const float radius = face.getWidth() * 0.5f;
+
+        // Step 3A — Contact shadow (grounds knob to panel). Draw beneath knob layers.
+        {
+            const juce::Colour baseColour = juce::Colours::black;
+
+            const float shadowExpandStep = juce::jlimit (0.0f, radius * 0.08f, radius * 0.03f);
+
+            constexpr float a0 = 0.20f;
+            constexpr float a1 = 0.10f;
+            constexpr float a2 = 0.05f;
+
+            for (int i = 0; i < 3; ++i)
+            {
+                const float ai = (i == 0 ? a0 : (i == 1 ? a1 : a2));
+                const float e  = shadowExpandStep * (float) i;
+
+                auto rShadow = shadowRect.expanded (e, e);
+
+                juce::ColourGradient grad (baseColour.withAlpha (ai),
+                                          rShadow.getCentreX(), rShadow.getBottom(),
+                                          baseColour.withAlpha (0.0f),
+                                          rShadow.getCentreX(), rShadow.getY(),
+                                          false);
+
+                g.setGradientFill (grad);
+                g.fillEllipse (rShadow);
+            }
+        }
+
+        // Step 3B — Ambient Occlusion ring (knob meets panel). Draw beneath rim/face layers.
+        {
+            const juce::Colour base = juce::Colours::black;
+
+            // Donut ring: rimOuter minus rimInner (even-odd fill).
+            juce::Path ringPath;
+            ringPath.addEllipse (rimOuter);
+            ringPath.addEllipse (rimInner);
+            ringPath.setUsingNonZeroWinding (false);
+
+            constexpr float aoAlphaBottom = 0.10f;
+            constexpr float aoAlphaTop    = 0.00f;
+
+            juce::ColourGradient aoGrad (base.withAlpha (aoAlphaBottom),
+                                         rimOuter.getCentreX(), rimOuter.getBottom(),
+                                         base.withAlpha (aoAlphaTop),
+                                         rimOuter.getCentreX(), rimOuter.getY(),
+                                         false);
+
+            g.setGradientFill (aoGrad);
+            g.fillPath (ringPath);
+
+            // Mild inner-edge emphasis band near rimInner.
+            const float innerEmphasis = juce::jlimit (0.0f, radius * 0.06f, radius * 0.02f);
+
+            const float minDim = juce::jmin (rimInner.getWidth(), rimInner.getHeight());
+            const float safeE  = juce::jlimit (0.0f, minDim * 0.25f, innerEmphasis);
+
+            auto innerBandOuter = rimInner.expanded (safeE, safeE);
+            auto innerBandInner = rimInner.reduced  (safeE);
+
+            juce::Path innerBand;
+            innerBand.addEllipse (innerBandOuter);
+            innerBand.addEllipse (innerBandInner);
+            innerBand.setUsingNonZeroWinding (false);
+
+            constexpr float innerAlphaBottom = 0.08f;
+
+            juce::ColourGradient innerGrad (base.withAlpha (innerAlphaBottom),
+                                            rimOuter.getCentreX(), rimOuter.getBottom(),
+                                            base.withAlpha (0.0f),
+                                            rimOuter.getCentreX(), rimOuter.getY(),
+                                            false);
+
+            g.setGradientFill (innerGrad);
+            g.fillPath (innerBand);
+        }
+
+        const juce::Colour cDarkMid (0xFF2A2A2A);
+        const juce::Colour cDark    (0xFF111111);
+        const juce::Colour cBlack   (0xFF000000);
+        const juce::Colour cRim     (0xFF333333);
+
+        const float ro = r - 0.5f;
+
+
+        // Step 4A — Machined rim: Rim base fill (dark neutral base). Draw beneath rim highlights and face.
+        {
+            juce::Path rimPath;
+            rimPath.addEllipse (rimOuter);
+            rimPath.addEllipse (rimInner);
+            rimPath.setUsingNonZeroWinding (false);  // even-odd fill to subtract inner
+
+            const juce::Colour rimBase = juce::Colour::fromFloatRGBA (0.12f, 0.12f, 0.12f, 1.0f);
+            g.setColour (rimBase);
+            g.fillPath (rimPath);
+        }
+
+        // Step 4B — Machined rim: Rim bevel gradient (top-left brighter, bottom-right darker).
+        {
+            juce::Path rimPath;
+            rimPath.addEllipse (rimOuter);
+            rimPath.addEllipse (rimInner);
+            rimPath.setUsingNonZeroWinding (false);  // even-odd fill to subtract inner
+
+            const float off = radius * 0.25f;
+            const juce::Point<float> pLight = center.translated (-off, -off);
+            const juce::Point<float> pDark  = center.translated ( off,  off);
+
+            const juce::Colour light = juce::Colour::fromFloatRGBA (0.22f, 0.22f, 0.22f, 1.0f);
+            const juce::Colour dark  = juce::Colour::fromFloatRGBA (0.08f, 0.08f, 0.08f, 1.0f);
+
+            juce::ColourGradient grad (light, pLight.x, pLight.y,
+                                      dark,  pDark.x,  pDark.y,
+                                      true);
+
+            g.setGradientFill (grad);
+            g.fillPath (rimPath);
+        }
+
+        // Step 4C — Machined rim: Rim catch light (thin highlight arc on rimOuter).
+        {
+            const float strokeW = juce::jlimit (radius * 0.01f, radius * 0.03f, radius * 0.02f);
+
+            const float startRad = juce::degreesToRadians (300.0f);
+            const float endRad   = juce::degreesToRadians ( 60.0f);
+
+            juce::Path catchPath;
+            catchPath.addArc (rimOuter.getX(), rimOuter.getY(),
+                              rimOuter.getWidth(), rimOuter.getHeight(),
+                              startRad, endRad, true);
+
+            const juce::Colour catchCol = juce::Colour::fromFloatRGBA (0.85f, 0.82f, 0.78f, 0.18f);
+            g.setColour (catchCol);
+            g.strokePath (catchPath, juce::PathStrokeType (strokeW,
+                                                          juce::PathStrokeType::curved,
+                                                          juce::PathStrokeType::rounded));
+        }
+
+        // Step 5A — Face dome: base fill (solid).
+        {
+            const juce::Colour faceBase = juce::Colour::fromFloatRGBA (0.16f, 0.16f, 0.16f, 1.0f);
+            g.setColour (faceBase);
+            g.fillEllipse (face);
+        }
+
+        // Step 5B — Face dome: subtle dome gradient (no hotspot).
+        {
+            const juce::Colour domeCenter = juce::Colour::fromFloatRGBA (0.19f, 0.19f, 0.19f, 1.0f);
+            const juce::Colour domeEdge   = juce::Colour::fromFloatRGBA (0.16f, 0.16f, 0.16f, 1.0f);
+
+            const float off = radius * 0.10f;
+            const juce::Point<float> domeP = center.translated (-off, -off);
+
+            juce::ColourGradient domeGrad (domeCenter, domeP.x, domeP.y,
+                                           domeEdge,   center.x, center.y,
+                                           true);
+
+            g.setGradientFill (domeGrad);
+            g.fillEllipse (face);
+        }
+
+        // Knob fill (radial gradient)
+        if (ro > 0.0f)
+        {
+            const float gx = cx - 0.1f * r;
+            const float gy = cy - 0.1f * r;
+
+            juce::ColourGradient grad (cDarkMid, gx, gy, cBlack, cx, cy, true);
+            grad.addColour (0.70, cDark);
+
+            g.setGradientFill (grad);
+            g.fillEllipse (cx - ro, cy - ro, 2.0f * ro, 2.0f * ro);
+        }
+
+        // Edge ticks (static)
+        if (r > 0.0f)
+        {
+            constexpr int   tickCount = 48;
+            constexpr float tickLen   = 8.0f;
+            constexpr float tickW     = 1.0f;
+            constexpr float tickAlpha = 0.55f;
+
+            const float tickOuter = r - 2.0f;
+            const float tickInner = tickOuter - tickLen;
+
+            if (tickInner > 0.0f && tickOuter > tickInner)
+            {
+                g.setColour (juce::Colours::white.withAlpha (tickAlpha));
+
+                const float startA = rotaryStartAngle;
+                const float endA   = rotaryEndAngle;
+                const float rotA   = juce::MathConstants<float>::halfPi + juce::MathConstants<float>::pi; // 90 + 180 degrees
+
+                for (int i = 0; i < tickCount; ++i)
+                {
+                    const float t = (float) i / (float) (tickCount - 1);
+                    const float aBase = startA + t * (endA - startA);
+                    const float a = aBase + rotA;
+
+                    const float dx = std::cos (a);
+                    const float dy = std::sin (a);
+
+                    const float x1 = cx + tickInner * dx;
+                    const float y1 = cy + tickInner * dy;
+                    const float x2 = cx + tickOuter * dx;
+                    const float y2 = cy + tickOuter * dy;
+
+                    g.drawLine (x1, y1, x2, y2, tickW);
+                }
+            }
+        }
+
+        // Subtle rim stroke
+        if (ro > 0.0f)
+        {
+            g.setColour (cRim);
+            g.drawEllipse (cx - ro, cy - ro, 2.0f * ro, 2.0f * ro, 1.0f);
+        }
+
+        // Inner shadow (top bias)
+        {
+            const float rr = r - 2.0f;
+            if (rr > 0.0f)
+            {
+                juce::ColourGradient sh (juce::Colours::black.withAlpha (0.80f),
+                                        cx, cy - rr,
+                                        juce::Colours::transparentBlack,
+                                        cx, cy,
+                                        false);
+                g.setGradientFill (sh);
+                g.fillEllipse (cx - rr, cy - rr, 2.0f * rr, 2.0f * rr);
+            }
+        }
+
+        // Faint highlight (bottom bias)
+        {
+            const float rr = r - 2.0f;
+            if (rr > 0.0f)
+            {
+                juce::ColourGradient hi (juce::Colours::transparentWhite,
+                                        cx, cy,
+                                        juce::Colours::white.withAlpha (0.05f),
+                                        cx, cy + rr,
+                                        false);
+                g.setGradientFill (hi);
+                g.fillEllipse (cx - rr, cy - rr, 2.0f * rr, 2.0f * rr);
+            }
+        }
+
+        // Indicator (line) — replaces JUCE dot/pointer; mapping unchanged.
+        const float angle = rotaryStartAngle
+                          + sliderPosProportional * (rotaryEndAngle - rotaryStartAngle);
+
+        const float lineW     = 3.0f;
+        const float lineLen   = 0.9f * r;       // 45% of diameter
+        const float lineInset = 0.10f * r;      // gap from center
+        const float lineR     = 2.0f;
+
+        // Subtle glow (no blur): one outer pass, then main pass.
+        {
+            juce::Path glow;
+            glow.addRoundedRectangle (-0.5f * (lineW + 2.0f),
+                                      -(lineInset + lineLen),
+                                      (lineW + 2.0f),
+                                      lineLen,
+                                      lineR + 1.0f);
+
+            g.setColour (juce::Colours::white.withAlpha (0.10f));
+            g.fillPath (glow, juce::AffineTransform::rotation (angle).translated (cx, cy));
+        }
+
+        {
+            juce::Path line;
+            line.addRoundedRectangle (-0.5f * lineW,
+                                      -(lineInset + lineLen),
+                                      lineW,
+                                      lineLen,
+                                      lineR);
+
+            auto col = slider.findColour (juce::Slider::thumbColourId);
+            g.setColour (col.isTransparent() ? juce::Colours::white.withAlpha (0.90f) : col);
+            g.fillPath (line, juce::AffineTransform::rotation (angle).translated (cx, cy));
+        }
+    }
+};
+
 CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcessorEditor (CompassMasteringLimiterAudioProcessor& p)
 : juce::AudioProcessorEditor (&p), processor (p)
 {
-    setResizable (false, false);
-    setSize (820, 360);
+    setSize (900, 420);
+
+    knobLnf = std::make_unique<CompassKnobLookAndFeel>();
 
     setRotary (drive);
+    drive.setLookAndFeel (knobLnf.get());
     addAndMakeVisible (drive);
 
     setRotary (ceiling);
+    ceiling.setLookAndFeel (knobLnf.get());
     addAndMakeVisible (ceiling);
     adaptiveBias.addItem ("Transparent", 1);
     adaptiveBias.addItem ("Balanced", 2);
@@ -114,6 +447,7 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
 
     // Trim knob setup
     setRotary (trim);
+    trim.setLookAndFeel (knobLnf.get());
     addAndMakeVisible (trim);
 
     trimLabel.setText ("Trim", juce::dontSendNotification);
@@ -122,6 +456,21 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
     trimLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
     addAndMakeVisible (trimLabel);
     trimLabel.setInterceptsMouseClicks (false, false);
+
+    // Value readouts under top rotaries (display-only)
+    auto initValueLabel = [&] (juce::Label& l)
+    {
+        l.setJustificationType (juce::Justification::centred);
+        l.setFont (juce::Font (12.5f));
+        l.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+        l.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+        l.setInterceptsMouseClicks (false, false);
+        addAndMakeVisible (l);
+    };
+
+    initValueLabel (trimValueLabel);
+    initValueLabel (glueValueLabel);
+    initValueLabel (ceilingValueLabel);
 
     // Meters visibility + clamp/glue flags
     addAndMakeVisible (inTpMeter);
@@ -143,11 +492,31 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
     startTimerHz (30);
 }
 
+CompassMasteringLimiterAudioProcessorEditor::~CompassMasteringLimiterAudioProcessorEditor()
+{
+    drive.setLookAndFeel (nullptr);
+    ceiling.setLookAndFeel (nullptr);
+    trim.setLookAndFeel (nullptr);
+    knobLnf.reset();
+}
+
+
 void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
 {
     const float current = processor.getCurrentGRDb();
 
     grMeter.pushValueDb (current);
+    currentGrLabel.setText (juce::String::formatted ("%.1f dB", current), juce::dontSendNotification);
+
+    // Top rotary value readouts (APVTS raw values)
+    auto& vts = processor.getAPVTS();
+    const float trimDb   = vts.getRawParameterValue ("trim")->load();
+    const float glueDb   = vts.getRawParameterValue ("drive")->load();
+    const float ceilDbTP = vts.getRawParameterValue ("ceiling")->load();
+
+    trimValueLabel.setText    (juce::String::formatted ("%.1f dB",   trimDb),   juce::dontSendNotification);
+    glueValueLabel.setText    (juce::String::formatted ("%.1f dB",   glueDb),   juce::dontSendNotification);
+    ceilingValueLabel.setText (juce::String::formatted ("%.1f dBTP", ceilDbTP), juce::dontSendNotification);
 
     float inTp = -120.0f;
     float outTp = -120.0f;
@@ -157,6 +526,9 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
         outTpMeter.pushValueDb (outTp);
         inTpMeter.repaint();
         outTpMeter.repaint();
+
+        inTpLabel.setText  (juce::String::formatted ("IN TP: %.1f",  inTp),  juce::dontSendNotification);
+        outTpLabel.setText (juce::String::formatted ("OUT TP: %.1f", outTp), juce::dontSendNotification);
     }
 
     float lufsS = -120.0f;
@@ -165,6 +537,9 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
     {
         lufsS = juce::jmax (-120.0f, lufsS);
         lufsI = juce::jmax (-120.0f, lufsI);
+
+        lufsSLabel.setText (juce::String::formatted ("LUFS-S: %.1f", lufsS), juce::dontSendNotification);
+        lufsILabel.setText (juce::String::formatted ("LUFS-I: %.1f", lufsI), juce::dontSendNotification);
     }
 
     float inPk = -120.0f;
@@ -174,9 +549,6 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
         inPk = juce::jmax (-120.0f, inPk);
         outPk = juce::jmax (-120.0f, outPk);
     }
-
-    const float ceilDb = processor.getCurrentCeilingDbTP();
-    juce::ignoreUnused (ceilDb);
 
     grMeter.repaint();
 }
@@ -209,54 +581,135 @@ void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
 
 void CompassMasteringLimiterAudioProcessorEditor::resized()
 {
-    auto b = getLocalBounds().reduced (16);
-    b.removeFromTop (30);
+    // Local geometry constants (single source of truth for this layout function)
+    const int knobSize        = 135;
+    const int knobGap         = 8;
+    const int knobRowExtraH   = 60;
+    const int valueLabelDY    = 4;
+    const int valueLabelH     = 20;
 
-    // Top row: Trim / Glue(drive) / Ceiling, then existing controls in remaining space.
-    auto knobRow = b.removeFromTop (124);
+    const int behaviorW       = 220;
+    const int behaviorGap     = 40;
+    const int behaviorTrimTop = 8;
+    const int behaviorH       = 28;
 
-    trim.setBounds (knobRow.removeFromLeft (104));
-    auto tl = trim.getBounds().translated (0, -18);
-    tl.setHeight (16);
-    trimLabel.setBounds (tl);
-    knobRow.removeFromLeft (16);
+    const int grTrimLR        = 80;
+    const int grLabelW        = 120;
+    const int grLabelH        = 30;
+    const int grLabelDY       = 10;
 
-    drive.setBounds (knobRow.removeFromLeft (104));
-    knobRow.removeFromLeft (16);
+    const int clampGlueGap    = 10;
 
-    ceiling.setBounds (knobRow.removeFromLeft (104));
-    knobRow.removeFromLeft (16);
+    const int truthNumW       = 140;
+    const int truthGap        = 20;
 
-    // Keep existing horizontal layout behavior, constrained to remaining knobRow.
-    adaptiveBias.setBounds (knobRow.removeFromLeft (260).withTrimmedTop (34).withHeight (26));
-    knobRow.removeFromLeft (16);
+    // 1) Start with full bounds
+    auto r = getLocalBounds();
 
-    stereoLink.setBounds (knobRow.removeFromLeft (260).withTrimmedTop (34).withHeight (26));
-    knobRow.removeFromLeft (16);
+    // 2) Outer frame (insets)
+    auto framed = r.withTrimmedLeft (Layout::insetL)
+                   .withTrimmedRight (Layout::insetR)
+                   .withTrimmedTop (Layout::insetT)
+                   .withTrimmedBottom (Layout::insetB);
 
-    oversamplingMin.setBounds (knobRow.removeFromLeft (100).withTrimmedTop (34).withHeight (26));
+    // 3) Carve out left/right TP meter columns
+    auto tpLeftZone = framed.removeFromLeft (Layout::leftTpWidth);
+    auto tpRightZone = framed.removeFromRight (Layout::rightTpWidth);
 
-    b.removeFromTop (10);
+    // 4) Remainder is the center main zone
+    auto mainZone = framed;
 
-    // Meter zone: wide centered GR bar, small clamp/glue bars, tall IN/OUT TP meters on edges.
-    auto meterZone = b;
+    // 5) Carve vertical bands from main zone (in order)
+    auto bandKnobs = mainZone.removeFromTop (Layout::topKnobBand);
+    mainZone.removeFromTop (Layout::interBandGap);
 
-    grMeter.setBounds (meterZone.removeFromTop (40).withTrimmedLeft (100).withTrimmedRight (100));
-    auto m = grMeter.getBounds();
+    auto bandContext = mainZone.removeFromTop (Layout::contextRow);
+    mainZone.removeFromTop (Layout::interBandGap);
 
-    // GR numeric (kept; aligned to GR bar)
-    currentGrLabel.setBounds (m.getRight() - 90, m.getY() + 10, 84, 18);
+    auto bandGR = mainZone.removeFromTop (Layout::grMainZone);
+    mainZone.removeFromTop (Layout::interBandGap);
 
-    auto smallMeterRow = meterZone.removeFromTop (24);
-    clampMeter.setBounds (smallMeterRow.removeFromLeft (smallMeterRow.getWidth() / 2 - 8));
-    glueMeter.setBounds  (smallMeterRow.removeFromRight (smallMeterRow.getWidth() / 2 - 8));
+    auto bandMiniBars = mainZone.removeFromTop (Layout::clampGlueBars);
+    mainZone.removeFromTop (Layout::interBandGap);
 
-    inTpMeter.setBounds  (20, meterZone.getY(), 50, meterZone.getHeight());
-    outTpMeter.setBounds (getWidth() - 70, meterZone.getY(), 50, meterZone.getHeight());
+    auto bandTruth = mainZone.removeFromTop (Layout::truthStrip);
 
-    // Optional small labels under TP meters
-    inTpLabel.setBounds  (20, meterZone.getBottom() - 20, 50, 20);
-    outTpLabel.setBounds (getWidth() - 70, meterZone.getBottom() - 20, 50, 20);
+    // Tall TP meters
+    inTpMeter.setBounds (tpLeftZone);
+    outTpMeter.setBounds (tpRightZone);
+
+    // Top: three knob columns (identical) inside bandKnobs
+    const int colGap     = 0;
+    const int labelAreaH = 24;
+    const int knobAreaH  = knobSize;
+    const int valueAreaH = 30;
+
+    auto cols = bandKnobs;
+
+    const int colsTotalGap = colGap * 2;
+    const int colW = (cols.getWidth() - colsTotalGap) / 3;
+
+    auto col1 = cols.removeFromLeft (colW);
+    cols.removeFromLeft (colGap);
+    auto col2 = cols.removeFromLeft (colW);
+    cols.removeFromLeft (colGap);
+    auto col3 = cols.removeFromLeft (colW);
+
+    auto makeAreas = [&] (juce::Rectangle<int> col)
+    {
+        auto labelArea = col.removeFromTop (labelAreaH);
+        auto knobArea  = col.removeFromTop (knobAreaH);
+        auto valueArea = col.removeFromTop (valueAreaH);
+        return (std::tuple<juce::Rectangle<int>, juce::Rectangle<int>, juce::Rectangle<int>> { labelArea, knobArea, valueArea });
+    };
+
+    {
+        auto [labelArea, knobArea, valueArea] = makeAreas (col1);
+        (void) labelArea;
+        trim.setBounds (knobArea.withSizeKeepingCentre (knobSize, knobSize).translated (56, 18));
+        trimValueLabel.setBounds (valueArea);
+    }
+    {
+        auto [labelArea, knobArea, valueArea] = makeAreas (col2);
+        (void) labelArea;
+        drive.setBounds (knobArea.withSizeKeepingCentre (knobSize, knobSize).translated (0, 18));
+        glueValueLabel.setBounds (valueArea);
+    }
+    {
+        auto [labelArea, knobArea, valueArea] = makeAreas (col3);
+        (void) labelArea;
+        ceiling.setBounds (knobArea.withSizeKeepingCentre (knobSize, knobSize).translated (-56, 18));
+        ceilingValueLabel.setBounds (valueArea);
+    }
+
+    // Context band (reserved)
+    (void) bandContext;
+
+    // GR band: header + bar + breathing
+    auto grHeader  = bandGR.removeFromTop (48);
+    auto grBarArea = bandGR.removeFromTop (52);
+
+    adaptiveBias.setBounds (grHeader.removeFromLeft (behaviorW).withTrimmedTop (behaviorTrimTop).withHeight (behaviorH));
+    grHeader.removeFromLeft (behaviorGap);
+    stereoLink.setBounds (grHeader.withTrimmedTop (behaviorTrimTop).withHeight (behaviorH));
+
+    grMeter.setBounds (grBarArea.withTrimmedLeft (grTrimLR).withTrimmedRight (grTrimLR));
+    currentGrLabel.setBounds (grBarArea.withSizeKeepingCentre (grLabelW, grLabelH).translated (0, grLabelDY));
+
+    // Clamp & Glue mini bars
+    clampMeter.setBounds (bandMiniBars.removeFromLeft (bandMiniBars.getWidth() / 2 - clampGlueGap));
+    glueMeter.setBounds  (bandMiniBars.removeFromRight (bandMiniBars.getWidth() / 2 - clampGlueGap));
+
+    // Truth strip: constrained to max width and centered
+    auto truthRow = bandTruth.withSizeKeepingCentre (juce::jmin (Layout::truthMaxWidth, bandTruth.getWidth()),
+                                                    bandTruth.getHeight());
+
+    inTpLabel.setBounds  (truthRow.removeFromLeft (truthNumW));
+    truthRow.removeFromLeft (truthGap);
+    outTpLabel.setBounds (truthRow.removeFromLeft (truthNumW));
+    truthRow.removeFromLeft (truthGap);
+    lufsSLabel.setBounds (truthRow.removeFromLeft (truthNumW));
+    lufsILabel.setBounds (truthRow.removeFromLeft (truthNumW));
 }
 
 
@@ -266,6 +719,30 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <cmath>
 #include "PluginProcessor.h"
+
+namespace Layout
+{
+    // Outer frame insets
+    static constexpr int insetL = 18;
+    static constexpr int insetR = 18;
+    static constexpr int insetT = 14;
+    static constexpr int insetB = 14;
+
+    // Vertical band heights
+    static constexpr int topKnobBand   = 140;
+    static constexpr int contextRow    = 40;
+    static constexpr int grMainZone    = 120;
+    static constexpr int clampGlueBars = 40;
+    static constexpr int truthStrip    = 30;
+    static constexpr int interBandGap  = 10;
+
+    // Side meter widths
+    static constexpr int leftTpWidth  = 60;
+    static constexpr int rightTpWidth = 60;
+
+    // Truth strip max width
+    static constexpr int truthMaxWidth = 680;
+}
 
 class GRHistoryMeter final : public juce::Component
 {
@@ -392,13 +869,15 @@ private:
     bool clampActive = false;
 };
 
+class CompassKnobLookAndFeel;
+
 class CompassMasteringLimiterAudioProcessorEditor final
     : public juce::AudioProcessorEditor
     , private juce::Timer
 {
 public:
     explicit CompassMasteringLimiterAudioProcessorEditor (CompassMasteringLimiterAudioProcessor&);
-    ~CompassMasteringLimiterAudioProcessorEditor() override = default;
+    ~CompassMasteringLimiterAudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -407,6 +886,8 @@ private:
     void timerCallback() override;
 
     CompassMasteringLimiterAudioProcessor& processor;
+
+    std::unique_ptr<CompassKnobLookAndFeel> knobLnf;
 
     juce::Slider drive;
     juce::Slider ceiling;
@@ -423,6 +904,10 @@ private:
     juce::Label outTpLabel;
     juce::Label lufsSLabel;
     juce::Label lufsILabel;
+
+    juce::Label trimValueLabel;
+    juce::Label glueValueLabel;
+    juce::Label ceilingValueLabel;
 
     juce::Label inPeakLabel;
     juce::Label outPeakLabel;
@@ -647,6 +1132,40 @@ void CompassMasteringLimiterAudioProcessor::reset (double sampleRate, int maxBlo
     eventDensityState  = { 0.0, 0.0 };
 
     lastOutScalar = { 1.0f, 1.0f };
+
+    // Ceiling envelope (state + coeffs) — computed here (SR-dependent), never in processBlock.
+    for (int c = 0; c < 2; ++c)
+        ceilingGainState[c] = 1.0f;
+
+    {
+        // Step 3.1 — Envelope SR domain: must match the loop where ceiling is enforced.
+        // Ceiling enforcement runs inside processOneSample(), which is called at:
+        // - Oversampled rate when canOsAudio == true
+        // - Native rate otherwise
+        float srEnv = (float) juce::jmax (1.0, lastSampleRate);
+        if (activeOversampler != nullptr)
+        {
+            const int osFactor = juce::jmax (1, (int) activeOversampler->getOversamplingFactor());
+            srEnv = (float) juce::jmax (1.0, lastSampleRate * (double) osFactor);
+        }
+
+        // Step 3.2 — ms -> tau (seconds), with safety clamps
+        const float tauDown = juce::jmax (1.0e-5f, ceilingAttackMs  * 0.001f);
+        const float tauUp   = juce::jmax (1.0e-5f, ceilingReleaseMs * 0.001f);
+
+        float aDown = std::expf (-1.0f / (tauDown * srEnv));
+        float aUp   = std::expf (-1.0f / (tauUp   * srEnv));
+
+        if (! std::isfinite ((double) aDown)) aDown = 0.0f;
+        if (! std::isfinite ((double) aUp))   aUp   = 0.0f;
+
+        // Clamp to (0, 1)
+        aDown = juce::jlimit (1.0e-6f, 0.999999f, aDown);
+        aUp   = juce::jlimit (1.0e-6f, 0.999999f, aUp);
+
+        ceilA_down = aDown;
+        ceilA_up   = aUp;
+    }
 }
 
 void CompassMasteringLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -1313,7 +1832,7 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
     lastOutScalar[1] = gR;
 
     constexpr float kEpsAbs = 1.0e-12f;
-    constexpr float kSoftClipK = 0.02f;
+    constexpr float kSoftClipK = 1.5f;
     float ceilingLin = (float) std::pow (10.0, ceilingDb / 20.0);
     if (! std::isfinite ((double) ceilingLin) || ceilingLin <= 0.0f)
         ceilingLin = 0.0f;
@@ -1327,9 +1846,23 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
 
         if (ceilingLin > 0.0f)
         {
+            const float a = std::abs (y);
+            float gReq = (a > kEpsAbs ? (ceilingLin / a) : 1.0f);
+            if (! std::isfinite ((double) gReq)) gReq = 1.0f;
+            gReq = juce::jlimit (0.0f, 1.0f, gReq);
+
+            const float gCeil = stepCeilingEnv (gReq, ceilingGainState[0], ceilA_down, ceilA_up);
+            y *= gCeil;
+
             const float u = y / ceilingLin;
             if (std::abs (u) > 1.0f)
-                y = ceilingLin * std::tanh (u * kSoftClipK) / kSoftClipK;
+                y = ceilingLin * std::tanh (u * kSoftClipK);
+
+            constexpr float kHardMargin = 1.005f;
+            const float hardLim = ceilingLin * kHardMargin;
+            const float ay = std::abs (y);
+            if (ay > hardLim && ay > 0.0f)
+                y = (y / ay) * hardLim;
         }
 
         if (! std::isfinite ((double) y)) y = 0.0f;
@@ -1345,9 +1878,23 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
 
         if (ceilingLin > 0.0f)
         {
+            const float a = std::abs (y);
+            float gReq = (a > kEpsAbs ? (ceilingLin / a) : 1.0f);
+            if (! std::isfinite ((double) gReq)) gReq = 1.0f;
+            gReq = juce::jlimit (0.0f, 1.0f, gReq);
+
+            const float gCeil = stepCeilingEnv (gReq, ceilingGainState[1], ceilA_down, ceilA_up);
+            y *= gCeil;
+
             const float u = y / ceilingLin;
             if (std::abs (u) > 1.0f)
-                y = ceilingLin * std::tanh (u * kSoftClipK) / kSoftClipK;
+                y = ceilingLin * std::tanh (u * kSoftClipK);
+
+            constexpr float kHardMargin = 1.005f;
+            const float hardLim = ceilingLin * kHardMargin;
+            const float ay = std::abs (y);
+            if (ay > hardLim && ay > 0.0f)
+                y = (y / ay) * hardLim;
         }
 
         if (! std::isfinite ((double) y)) y = 0.0f;
@@ -1363,9 +1910,23 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
 
         if (ceilingLin > 0.0f)
         {
+            const float a = std::abs (y);
+            float gReq = (a > kEpsAbs ? (ceilingLin / a) : 1.0f);
+            if (! std::isfinite ((double) gReq)) gReq = 1.0f;
+            gReq = juce::jlimit (0.0f, 1.0f, gReq);
+
+            const float gCeil = stepCeilingEnv (gReq, ceilingGainState[1], ceilA_down, ceilA_up);
+            y *= gCeil;
+
             const float u = y / ceilingLin;
             if (std::abs (u) > 1.0f)
-                y = ceilingLin * std::tanh (u * kSoftClipK) / kSoftClipK;
+                y = ceilingLin * std::tanh (u * kSoftClipK);
+
+            constexpr float kHardMargin = 1.005f;
+            const float hardLim = ceilingLin * kHardMargin;
+            const float ay = std::abs (y);
+            if (ay > hardLim && ay > 0.0f)
+                y = (y / ay) * hardLim;
         }
 
         if (! std::isfinite ((double) y)) y = 0.0f;
@@ -1501,6 +2062,9 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
                 const int ch = juce::jmax (getTotalNumInputChannels(), getTotalNumOutputChannels());
                 reset (lastSampleRate, lastMaxBlock, ch);
 
+                ceilingGainState[0] = 1.0f;
+                ceilingGainState[1] = 1.0f;
+
                 // Transport-safe boundary: latch oversampling selection (no allocations here).
                 const int osMinIndexBoundary = (int) apvts->getRawParameterValue ("oversampling_min")->load();
                 selectOversamplingAtBoundary (osMinIndexBoundary);
@@ -1516,6 +2080,9 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
 
         const int ch = juce::jmax (getTotalNumInputChannels(), getTotalNumOutputChannels());
         reset (lastSampleRate, lastMaxBlock, ch);
+
+        ceilingGainState[0] = 1.0f;
+        ceilingGainState[1] = 1.0f;
 
         const int osMinIndexBoundary = (int) apvts->getRawParameterValue ("oversampling_min")->load();
         selectOversamplingAtBoundary (osMinIndexBoundary);
@@ -2528,6 +3095,16 @@ private:
     // Phase D: promoted helpers (no allocations, no virtual dispatch)
     static double onePoleAlpha (double tauSec, double dtSec) noexcept;
 
+    // Step 5 — Ceiling envelope helper (gain domain, per-sample)
+    static inline float stepCeilingEnv (float gReq, float& state, float aDown, float aUp) noexcept
+    {
+        gReq = juce::jlimit (0.0f, 1.0f, gReq);
+        const float a = (gReq < state ? aDown : aUp);
+        const float aClamped = juce::jlimit (1.0e-6f, 0.999999f, a);
+        state = aClamped * state + (1.0f - aClamped) * gReq;
+        return state;
+    }
+
     // Phase 1.x — Hot-path exp/log acceleration (tables precomputed in prepareToPlay; no lazy init)
     static constexpr int    kExpTableSize = 8192;
     static constexpr double kExpMaxX      = 0.1;   // x = dt/tau domain clamp
@@ -2661,6 +3238,17 @@ private:
 
     // Output scalar continuity (tiny, deterministic) — prevents micro-steps reaching the output
     std::array<float, 2> lastOutScalar { 1.0f, 1.0f };
+
+    // Step 1.1 — Per-channel ceiling envelope state (2-channel accumulator contract)
+    float ceilingGainState[2] = { 1.0f, 1.0f };
+
+    // Step 1.2 — Ceiling envelope coefficients (1-pole smoothing)
+    float ceilA_down = 0.0f;  // gain decreasing
+    float ceilA_up   = 0.0f;  // gain increasing
+
+    // Step 2 — Ceiling envelope time constants (defaults; ms)
+    float ceilingAttackMs  = 0.2f;   // fast catch, avoids overshoot
+    float ceilingReleaseMs = 30.0f;  // smooth recovery
 
     // Phase 1.9 — Bypass crossfade (sample-accurate, no resets on bypass edges)
     float bypassMix = 1.0f; // 1=wet, 0=dry

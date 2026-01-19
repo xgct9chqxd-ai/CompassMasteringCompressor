@@ -197,19 +197,6 @@ private:
                                                           juce::PathStrokeType::rounded));
         }
 
-        // Step 4A — Machined rim: Rim base fill (dark neutral base).
-        {
-            // Donut ring: rimOuter minus rimInner (even-odd fill).
-            juce::Path rimPath;
-            rimPath.addEllipse (rimOuter);
-            rimPath.addEllipse (rimInner);
-            rimPath.setUsingNonZeroWinding (false);
-
-            const juce::Colour rimBase = juce::Colour::fromFloatRGBA (0.12f, 0.12f, 0.12f, 1.0f);
-            g.setColour (rimBase);
-            g.fillPath (rimPath);
-        }
-
         // Step 5A — Face dome: base fill (solid).
         {
             const juce::Colour faceBase = juce::Colour::fromFloatRGBA (0.16f, 0.16f, 0.16f, 1.0f);
