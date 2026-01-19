@@ -26,9 +26,115 @@ public:
                            juce::Slider& slider) override
     {
         const auto knobBounds = juce::Rectangle<float> ((float) x, (float) y, (float) width, (float) height);
+        drawMachinedKnob (g, knobBounds, sliderPosProportional, rotaryStartAngle, rotaryEndAngle, slider);
+    }
+
+private:
+    void drawMachinedKnob (juce::Graphics& g,
+                           juce::Rectangle<float> knobBounds,
+                           float sliderPosProportional,
+                           float rotaryStartAngle,
+                           float rotaryEndAngle,
+                           juce::Slider& slider)
+    {
         const float cx = knobBounds.getCentreX();
         const float cy = knobBounds.getCentreY();
         const float r  = juce::jmin (knobBounds.getWidth(), knobBounds.getHeight()) * 0.5f;
+
+        const auto boundsF = knobBounds;
+        const float radiusBase = boundsF.getWidth() * 0.5f;
+
+        const float clipInset    = juce::jlimit (0.0f, radiusBase * 0.10f, radiusBase * 0.06f);
+        const float shadowDy     = juce::jlimit (0.0f, radiusBase * 0.10f, radiusBase * 0.03f);
+        const float faceInset    = juce::jlimit (0.0f, radiusBase * 0.10f, radiusBase * 0.06f);
+        const float aoInset      = juce::jlimit (0.0f, radiusBase * 0.10f, radiusBase * 0.03f);
+        const float rimThickness = juce::jlimit (radiusBase * 0.10f, radiusBase * 0.15f, radiusBase * 0.12f);
+
+        const auto outer      = boundsF.reduced (clipInset);
+        const auto shadowRect = outer.translated (0.0f, shadowDy);
+        const auto rimOuter   = outer;
+        const auto rimInner   = rimOuter.reduced (rimThickness);
+        const auto face       = rimInner.reduced (faceInset);
+        const auto aoRing     = rimInner.reduced (aoInset);
+
+        const auto center = face.getCentre();
+        const float radius = face.getWidth() * 0.5f;
+
+        // Step 3A — Contact shadow (grounds knob to panel). Draw beneath knob layers.
+        {
+            const juce::Colour baseColour = juce::Colours::black;
+
+            const float shadowExpandStep = juce::jlimit (0.0f, radius * 0.08f, radius * 0.03f);
+
+            constexpr float a0 = 0.20f;
+            constexpr float a1 = 0.10f;
+            constexpr float a2 = 0.05f;
+
+            for (int i = 0; i < 3; ++i)
+            {
+                const float ai = (i == 0 ? a0 : (i == 1 ? a1 : a2));
+                const float e  = shadowExpandStep * (float) i;
+
+                auto rShadow = shadowRect.expanded (e, e);
+
+                juce::ColourGradient grad (baseColour.withAlpha (ai),
+                                          rShadow.getCentreX(), rShadow.getBottom(),
+                                          baseColour.withAlpha (0.0f),
+                                          rShadow.getCentreX(), rShadow.getY(),
+                                          false);
+
+                g.setGradientFill (grad);
+                g.fillEllipse (rShadow);
+            }
+        }
+
+        // Step 3B — Ambient Occlusion ring (knob meets panel). Draw beneath rim/face layers.
+        {
+            const juce::Colour base = juce::Colours::black;
+
+            // Donut ring: rimOuter minus rimInner (even-odd fill).
+            juce::Path ringPath;
+            ringPath.addEllipse (rimOuter);
+            ringPath.addEllipse (rimInner);
+            ringPath.setUsingNonZeroWinding (false);
+
+            constexpr float aoAlphaBottom = 0.10f;
+            constexpr float aoAlphaTop    = 0.00f;
+
+            juce::ColourGradient aoGrad (base.withAlpha (aoAlphaBottom),
+                                         rimOuter.getCentreX(), rimOuter.getBottom(),
+                                         base.withAlpha (aoAlphaTop),
+                                         rimOuter.getCentreX(), rimOuter.getY(),
+                                         false);
+
+            g.setGradientFill (aoGrad);
+            g.fillPath (ringPath);
+
+            // Mild inner-edge emphasis band near rimInner.
+            const float innerEmphasis = juce::jlimit (0.0f, radius * 0.06f, radius * 0.02f);
+
+            const float minDim = juce::jmin (rimInner.getWidth(), rimInner.getHeight());
+            const float safeE  = juce::jlimit (0.0f, minDim * 0.25f, innerEmphasis);
+
+            auto innerBandOuter = rimInner.expanded (safeE, safeE);
+            auto innerBandInner = rimInner.reduced  (safeE);
+
+            juce::Path innerBand;
+            innerBand.addEllipse (innerBandOuter);
+            innerBand.addEllipse (innerBandInner);
+            innerBand.setUsingNonZeroWinding (false);
+
+            constexpr float innerAlphaBottom = 0.08f;
+
+            juce::ColourGradient innerGrad (base.withAlpha (innerAlphaBottom),
+                                            rimOuter.getCentreX(), rimOuter.getBottom(),
+                                            base.withAlpha (0.0f),
+                                            rimOuter.getCentreX(), rimOuter.getY(),
+                                            false);
+
+            g.setGradientFill (innerGrad);
+            g.fillPath (innerBand);
+        }
 
         const juce::Colour cDarkMid (0xFF2A2A2A);
         const juce::Colour cDark    (0xFF111111);
@@ -36,6 +142,96 @@ public:
         const juce::Colour cRim     (0xFF333333);
 
         const float ro = r - 0.5f;
+
+
+        // Step 4A — Machined rim: Rim base fill (dark neutral base). Draw beneath rim highlights and face.
+        {
+            juce::Path rimPath;
+            rimPath.addEllipse (rimOuter);
+            rimPath.addEllipse (rimInner);
+            rimPath.setUsingNonZeroWinding (false);  // even-odd fill to subtract inner
+
+            const juce::Colour rimBase = juce::Colour::fromFloatRGBA (0.12f, 0.12f, 0.12f, 1.0f);
+            g.setColour (rimBase);
+            g.fillPath (rimPath);
+        }
+
+        // Step 4B — Machined rim: Rim bevel gradient (top-left brighter, bottom-right darker).
+        {
+            juce::Path rimPath;
+            rimPath.addEllipse (rimOuter);
+            rimPath.addEllipse (rimInner);
+            rimPath.setUsingNonZeroWinding (false);  // even-odd fill to subtract inner
+
+            const float off = radius * 0.25f;
+            const juce::Point<float> pLight = center.translated (-off, -off);
+            const juce::Point<float> pDark  = center.translated ( off,  off);
+
+            const juce::Colour light = juce::Colour::fromFloatRGBA (0.22f, 0.22f, 0.22f, 1.0f);
+            const juce::Colour dark  = juce::Colour::fromFloatRGBA (0.08f, 0.08f, 0.08f, 1.0f);
+
+            juce::ColourGradient grad (light, pLight.x, pLight.y,
+                                      dark,  pDark.x,  pDark.y,
+                                      true);
+
+            g.setGradientFill (grad);
+            g.fillPath (rimPath);
+        }
+
+        // Step 4C — Machined rim: Rim catch light (thin highlight arc on rimOuter).
+        {
+            const float strokeW = juce::jlimit (radius * 0.01f, radius * 0.03f, radius * 0.02f);
+
+            const float startRad = juce::degreesToRadians (300.0f);
+            const float endRad   = juce::degreesToRadians ( 60.0f);
+
+            juce::Path catchPath;
+            catchPath.addArc (rimOuter.getX(), rimOuter.getY(),
+                              rimOuter.getWidth(), rimOuter.getHeight(),
+                              startRad, endRad, true);
+
+            const juce::Colour catchCol = juce::Colour::fromFloatRGBA (0.85f, 0.82f, 0.78f, 0.18f);
+            g.setColour (catchCol);
+            g.strokePath (catchPath, juce::PathStrokeType (strokeW,
+                                                          juce::PathStrokeType::curved,
+                                                          juce::PathStrokeType::rounded));
+        }
+
+        // Step 4A — Machined rim: Rim base fill (dark neutral base).
+        {
+            // Donut ring: rimOuter minus rimInner (even-odd fill).
+            juce::Path rimPath;
+            rimPath.addEllipse (rimOuter);
+            rimPath.addEllipse (rimInner);
+            rimPath.setUsingNonZeroWinding (false);
+
+            const juce::Colour rimBase = juce::Colour::fromFloatRGBA (0.12f, 0.12f, 0.12f, 1.0f);
+            g.setColour (rimBase);
+            g.fillPath (rimPath);
+        }
+
+        // Step 5A — Face dome: base fill (solid).
+        {
+            const juce::Colour faceBase = juce::Colour::fromFloatRGBA (0.16f, 0.16f, 0.16f, 1.0f);
+            g.setColour (faceBase);
+            g.fillEllipse (face);
+        }
+
+        // Step 5B — Face dome: subtle dome gradient (no hotspot).
+        {
+            const juce::Colour domeCenter = juce::Colour::fromFloatRGBA (0.19f, 0.19f, 0.19f, 1.0f);
+            const juce::Colour domeEdge   = juce::Colour::fromFloatRGBA (0.16f, 0.16f, 0.16f, 1.0f);
+
+            const float off = radius * 0.10f;
+            const juce::Point<float> domeP = center.translated (-off, -off);
+
+            juce::ColourGradient domeGrad (domeCenter, domeP.x, domeP.y,
+                                           domeEdge,   center.x, center.y,
+                                           true);
+
+            g.setGradientFill (domeGrad);
+            g.fillEllipse (face);
+        }
 
         // Knob fill (radial gradient)
         if (ro > 0.0f)
@@ -395,9 +591,9 @@ void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
 void CompassMasteringLimiterAudioProcessorEditor::resized()
 {
     // Local geometry constants (single source of truth for this layout function)
-    const int knobSize        = 140;
-    const int knobGap         = 15;
-    const int knobRowExtraH   = 40;
+    const int knobSize        = 135;
+    const int knobGap         = 8;
+    const int knobRowExtraH   = 60;
     const int valueLabelDY    = 4;
     const int valueLabelH     = 20;
 
@@ -452,7 +648,7 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
     outTpMeter.setBounds (tpRightZone);
 
     // Top: three knob columns (identical) inside bandKnobs
-    const int colGap     = 18;
+    const int colGap     = 0;
     const int labelAreaH = 24;
     const int knobAreaH  = knobSize;
     const int valueAreaH = 30;
@@ -479,19 +675,19 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
     {
         auto [labelArea, knobArea, valueArea] = makeAreas (col1);
         (void) labelArea;
-        trim.setBounds (knobArea.withSizeKeepingCentre (knobSize, knobSize));
+        trim.setBounds (knobArea.withSizeKeepingCentre (knobSize, knobSize).translated (56, 18));
         trimValueLabel.setBounds (valueArea);
     }
     {
         auto [labelArea, knobArea, valueArea] = makeAreas (col2);
         (void) labelArea;
-        drive.setBounds (knobArea.withSizeKeepingCentre (knobSize, knobSize));
+        drive.setBounds (knobArea.withSizeKeepingCentre (knobSize, knobSize).translated (0, 18));
         glueValueLabel.setBounds (valueArea);
     }
     {
         auto [labelArea, knobArea, valueArea] = makeAreas (col3);
         (void) labelArea;
-        ceiling.setBounds (knobArea.withSizeKeepingCentre (knobSize, knobSize));
+        ceiling.setBounds (knobArea.withSizeKeepingCentre (knobSize, knobSize).translated (-56, 18));
         ceilingValueLabel.setBounds (valueArea);
     }
 
