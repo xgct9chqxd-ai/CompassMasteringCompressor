@@ -199,6 +199,21 @@ private:
 
     // Phase D: promoted helpers (no allocations, no virtual dispatch)
     static double onePoleAlpha (double tauSec, double dtSec) noexcept;
+
+    // Phase 1.x — Hot-path exp/log acceleration (tables precomputed in prepareToPlay; no lazy init)
+    static constexpr int    kExpTableSize = 8192;
+    static constexpr double kExpMaxX      = 0.1;   // x = dt/tau domain clamp
+
+    static constexpr int    kLogTableSize = 4096;
+    static constexpr double kLogMin       = -12.0; // log10(y) min
+    static constexpr double kLogRange     = 18.0;  // [-12, +6]
+
+    std::array<double, (size_t) kExpTableSize> expNegTable {};
+    std::array<double, (size_t) kLogTableSize> log10Table  {};
+
+    double expLookup (double x) const noexcept;     // returns exp(-x) using expNegTable
+    double log10Lookup (double y) const noexcept;   // returns log10(y) using log10Table (indexing may use std::log10)
+
     void processOneSample (float* const* chPtr,
                           int numCh,
                           int i,
@@ -374,6 +389,10 @@ private:
     std::array<double, 2> guardTotE    { 0.0, 0.0 }; // total energy EMA
     std::array<double, 2> guardHiE     { 0.0, 0.0 }; // high-band energy EMA
     double guardNb0 = 0.0, guardNb1 = 0.0, guardNb2 = 0.0, guardNa1 = 0.0, guardNa2 = 0.0;
+
+    // Guardrail measurement compensation (Phase 1.7 Priority 4): 1st-order low-shelf (+3 dB @ 200 Hz), measurement path only
+    double lowShelfB0 = 1.0, lowShelfB1 = 0.0, lowShelfA1 = 0.0; // identity defaults until boundary compute
+    std::array<double, 2> lowShelfZ1 { 0.0, 0.0 };
 
     // GR average (Phase 1.7 activation): 50 ms one-pole EMA of grAbsDb (global, not per-channel)
     double guardGrAvgDb = 0.0;

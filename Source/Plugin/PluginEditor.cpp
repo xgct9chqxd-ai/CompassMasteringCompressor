@@ -181,7 +181,7 @@ void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
         g.drawText (label, r, juce::Justification::centred, false);
     };
 
-    drawLabelAbove (drive,           "Drive");
+    drawLabelAbove (drive,           "Glue");
     drawLabelAbove (ceiling,         "Ceiling");
     drawLabelAbove (adaptiveBias,    "Adaptive Bias");
     drawLabelAbove (stereoLink,      "Stereo Link");
