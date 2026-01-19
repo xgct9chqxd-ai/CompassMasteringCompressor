@@ -707,10 +707,16 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
         };
 
         // HF stress -> grScalar mapping (Phase 1.7)
+        // Hard containment: prevent log-domain escape (NaN/Inf/negative).
+        if (! std::isfinite (hfEnergyStereo) || hfEnergyStereo <= 0.0)
+            hfEnergyStereo = 0.0;
+
         const double hfStress = 10.0 * std::log10 (hfEnergyStereo + 1.0e-12);
         const double stressNorm = juce::jlimit (0.0, 1.0, (hfStress - (-30.0)) / 30.0);
-        double grScalar = 1.0 - 0.25 * smoothstep (stressNorm);
-        grScalar = juce::jlimit (0.75, 1.0, grScalar);
+
+        const double s = smoothstep (stressNorm);
+        double grScalar = 1.0 + 0.25 * s;
+        grScalar = juce::jlimit (1.0, 1.25, grScalar);
 
         // Level-dependent activation via GR average (Phase 1.7)
         const double grAbsDb = juce::jmax (outDbL, outDbR);
@@ -720,8 +726,8 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
         const double t = juce::jlimit (0.0, 1.0, (guardGrAvgDb - 6.0) / 12.0);
         const double activation = t * t * (t * (t * 6.0 - 15.0) + 10.0);
 
-        double finalScalar = 1.0 - activation * (1.0 - grScalar);
-        finalScalar = juce::jlimit (0.75, 1.0, finalScalar);
+        double finalScalar = 1.0 + activation * (grScalar - 1.0);
+        finalScalar = juce::jlimit (1.0, 1.25, finalScalar);
 
         // Final application (hard-fenced): broadband scaling of post-link GR only
         outDbL *= finalScalar;
@@ -924,6 +930,7 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
         }
         eventDensityState  = { 0.0, 0.0 };
         guardLpState       = { 0.0, 0.0 };
+        guardHpState2      = { 0.0, 0.0 };
         guardTotE          = { 0.0, 0.0 };
         guardHiE           = { 0.0, 0.0 };
         lastAppliedAttnDb  = { 0.0, 0.0 };
@@ -1451,6 +1458,7 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
         }
         eventDensityState  = { 0.0, 0.0 };
         guardLpState       = { 0.0, 0.0 };
+        guardHpState2      = { 0.0, 0.0 };
         guardTotE          = { 0.0, 0.0 };
         guardHiE           = { 0.0, 0.0 };
         lastAppliedAttnDb  = { 0.0, 0.0 };
