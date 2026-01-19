@@ -104,6 +104,7 @@ void CompassMasteringLimiterAudioProcessor::reset (double sampleRate, int maxBlo
     // Phase 11 — Metering Plumbing: deterministic meter timing + accumulator reset (single source of truth).
     meterDt = 1.0 / lastSampleRate;
     meterPublishSamples = (int) juce::jmax (1.0, lastSampleRate / 50.0); // 50 Hz, clamped
+    lastLink01Smoothed = 1.0;
     meterCountdown = meterPublishSamples;
 
     for (int c = 0; c < 2; ++c)
@@ -452,15 +453,18 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
 
         const double tpDb = 20.0 * std::log10 (std::abs (s) + kEpsLin);
 
-        // Phase 1.9 — Silence-horizon reset (0.5 s): bounded adaptive memory under sustained silence.
+        // Phase 1.9 — Silence-horizon reset (0.35 s): bounded adaptive memory under sustained silence.
         {
+            constexpr double kSilenceHorizonSec = 0.35;
+            constexpr double kSilenceDecayAlpha = 0.995;
+
             const double fs = (dt > 0.0 ? (1.0 / dt) : 0.0);
-            const int silenceSamplesRequired = (int) std::ceil (0.5 * juce::jmax (1.0, fs));
+            const int silenceSamplesRequired = (int) std::ceil (kSilenceHorizonSec * juce::jmax (1.0, fs));
 
             if (tpDb < -90.0)
                 ++silenceCountSamples[(size_t) c];
             else
-                silenceCountSamples[(size_t) c] = 0;
+                silenceCountSamples[(size_t) c] = (int) (kSilenceDecayAlpha * (double) silenceCountSamples[(size_t) c]);
 
             if (silenceCountSamples[(size_t) c] >= silenceSamplesRequired)
             {
@@ -485,8 +489,39 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
         double attnTargetDb = softplus / kSoftK;
         attnTargetDb = juce::jlimit (0.0, kMaxAttnDb, attnTargetDb);
 
-        constexpr double kGrFloorDb    = 0.05;
-        constexpr double kHysteresisDb = 0.08;
+        // Priority 7 — Adaptive GR floor & hysteresis (pre-gate proxy macro01; bounded ±0.03 dB)
+        constexpr double kGrFloorDbBase    = 0.05;
+        constexpr double kHysteresisDbBase = 0.08;
+        constexpr double kMaxAdaptDb       = 0.03;
+
+        // Pre-gate proxy energy input (same math as later, but using current attnTargetDb pre-gate)
+        const double energyInputEarly = juce::jmax (0.0, std::pow (10.0, attnTargetDb / 20.0) - 1.0);
+
+        // Early macro01 proxy (same math form as later; no state writes)
+        const double macroSecEarly = kMacroSecBase * (1.20 - 0.40 * bias01);
+        const double aMEarly = std::exp (-dt / macroSecEarly);
+        const double EprevEarly = macroEnergyState[(size_t) c];
+        const double uEarly = energyInputEarly;
+
+        double EnextEarly = aMEarly * EprevEarly + (1.0 - aMEarly) * uEarly;
+        EnextEarly = juce::jlimit (juce::jmin (EprevEarly, uEarly), juce::jmax (EprevEarly, uEarly), EnextEarly);
+        EnextEarly = juce::jmax (0.0, EnextEarly);
+
+        const double macro01Early = EnextEarly / (1.0 + EnextEarly);
+
+        // Smooth, bounded offset: smoothstep(macro01Early) ∈ [0,1] → m ∈ [-1,+1] → deltaDb ∈ [-0.03,+0.03]
+        const double macroSmoothEarly = (3.0 * macro01Early * macro01Early) - (2.0 * macro01Early * macro01Early * macro01Early);
+        const double mEarly = (2.0 * macroSmoothEarly) - 1.0;
+        const double deltaDb = kMaxAdaptDb * mEarly;
+
+        double kGrFloorDb = kGrFloorDbBase - deltaDb;
+        double kHysteresisDb = kHysteresisDbBase + deltaDb;
+
+        kGrFloorDb    = juce::jlimit (kGrFloorDbBase - kMaxAdaptDb,    kGrFloorDbBase + kMaxAdaptDb,    kGrFloorDb);
+        kHysteresisDb = juce::jlimit (kHysteresisDbBase - kMaxAdaptDb, kHysteresisDbBase + kMaxAdaptDb, kHysteresisDb);
+
+        kGrFloorDb    = juce::jmax (0.0, kGrFloorDb);
+        kHysteresisDb = juce::jmax (0.0, kHysteresisDb);
 
         double currentTarget = attnTargetDb;
         if (currentTarget < kGrFloorDb)
@@ -597,7 +632,8 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
 
         const bool isRelease = (xT < yPrev - epsDb);
 
-        const double couple = kCoupleMin + (kCoupleMax - kCoupleMin) * macro01;
+        const double macroSmooth = (3.0 * macro01 * macro01) - (2.0 * macro01 * macro01 * macro01);
+        const double couple = kCoupleMin + (kCoupleMax - kCoupleMin) * macroSmooth;
         const double microSecEff = isRelease ? (microSecBase * couple) : microSecBase;
 
         const double omega0 = 1.0 / microSecEff;
@@ -629,7 +665,8 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
         constexpr double maxReleaseDbPerSec = 1800.0;    // 10× slower = musical recovery, no pumping
 
         // Convert to per-sample limits using the actual time step (dt)
-        const double maxAttackDb  = maxAttackDbPerSec  * dt;
+        const double attackScale = 0.85 + 0.30 * w_cf;
+        const double maxAttackDb  = (maxAttackDbPerSec * attackScale) * dt;
         const double maxReleaseDb = maxReleaseDbPerSec * dt;
 
         // Apply asymmetric slew
@@ -651,9 +688,14 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
 
     // Note: detector/envelope is 2ch; additional channels are not part of the attenuation-link computation.
 
+    constexpr double kLinkSmoothingTauSec = 0.007;
+    const double aLink = onePoleAlpha (kLinkSmoothingTauSec, dt);
+    lastLink01Smoothed = aLink * lastLink01Smoothed + (1.0 - aLink) * link01;
+    const double link01Smooth = juce::jlimit (0.0, 1.0, lastLink01Smoothed);
+
     const double linkedDb = juce::jmax (attnDbCh[0], attnDbCh[1]);
-    const double outDbL0 = (1.0 - link01) * attnDbCh[0] + link01 * linkedDb;
-    const double outDbR0 = (1.0 - link01) * attnDbCh[1] + link01 * linkedDb;
+    const double outDbL0 = (1.0 - link01Smooth) * attnDbCh[0] + link01Smooth * linkedDb;
+    const double outDbR0 = (1.0 - link01Smooth) * attnDbCh[1] + link01Smooth * linkedDb;
 
     double outDbL = outDbL0;
     double outDbR = outDbR0;
@@ -676,7 +718,7 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
         guardGrAvgDb = aGr * guardGrAvgDb + (1.0 - aGr) * grAbsDb;
 
         const double t = juce::jlimit (0.0, 1.0, (guardGrAvgDb - 6.0) / 12.0);
-        const double activation = smoothstep (t);
+        const double activation = t * t * (t * (t * 6.0 - 15.0) + 10.0);
 
         double finalScalar = 1.0 - activation * (1.0 - grScalar);
         finalScalar = juce::jlimit (0.75, 1.0, finalScalar);
@@ -997,6 +1039,7 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
             // CPU fast-path: if this block cannot exceed Ceiling after Drive AND envelope state is at rest,
             // skip oversampling + heavy inner loop, but advance smoothers deterministically.
             bool skipOsFastPath = false;
+            skipOsFastPath = false; // Phase 1.9: fast-path disabled (wet path always runs when canOsAudio)
             {
                 // Only skip if envelope state is already effectively at rest (avoids dropping residual GR).
                 constexpr double kRestDb = 1.0e-3;  // ~0.001 dB
@@ -1030,7 +1073,7 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
 
                     // Small negative margin keeps us safely on the "no GR" side.
                     if (((tpDbPeak + driveDbT) - ceilingDbT) <= -0.05)
-                        skipOsFastPath = true;
+                        skipOsFastPath = false; // Phase 1.9: fast-path disabled (prevent wet/dry discontinuity)
                 }
             }
 

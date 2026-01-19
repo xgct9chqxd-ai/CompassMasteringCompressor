@@ -1,407 +1,15 @@
-===== FILE: ./build_phase0/cmake_install.cmake =====
-# Install script for directory: /Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter
-
-# Set the install prefix
-if(NOT DEFINED CMAKE_INSTALL_PREFIX)
-  set(CMAKE_INSTALL_PREFIX "/usr/local")
-endif()
-string(REGEX REPLACE "/$" "" CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
-
-# Set the install configuration name.
-if(NOT DEFINED CMAKE_INSTALL_CONFIG_NAME)
-  if(BUILD_TYPE)
-    string(REGEX REPLACE "^[^A-Za-z0-9_]+" ""
-           CMAKE_INSTALL_CONFIG_NAME "${BUILD_TYPE}")
-  else()
-    set(CMAKE_INSTALL_CONFIG_NAME "")
-  endif()
-  message(STATUS "Install configuration: \"${CMAKE_INSTALL_CONFIG_NAME}\"")
-endif()
-
-# Set the component getting installed.
-if(NOT CMAKE_INSTALL_COMPONENT)
-  if(COMPONENT)
-    message(STATUS "Install component: \"${COMPONENT}\"")
-    set(CMAKE_INSTALL_COMPONENT "${COMPONENT}")
-  else()
-    set(CMAKE_INSTALL_COMPONENT)
-  endif()
-endif()
-
-# Is this installation the result of a crosscompile?
-if(NOT DEFINED CMAKE_CROSSCOMPILING)
-  set(CMAKE_CROSSCOMPILING "FALSE")
-endif()
-
-# Set path to fallback-tool for dependency-resolution.
-if(NOT DEFINED CMAKE_OBJDUMP)
-  set(CMAKE_OBJDUMP "/usr/bin/objdump")
-endif()
-
-if(NOT CMAKE_INSTALL_LOCAL_ONLY)
-  # Include the install script for the subdirectory.
-  include("/Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter/build_phase0/JUCE/cmake_install.cmake")
-endif()
-
-string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
-       "${CMAKE_INSTALL_MANIFEST_FILES}")
-if(CMAKE_INSTALL_LOCAL_ONLY)
-  file(WRITE "/Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter/build_phase0/install_local_manifest.txt"
-     "${CMAKE_INSTALL_MANIFEST_CONTENT}")
-endif()
-if(CMAKE_INSTALL_COMPONENT)
-  if(CMAKE_INSTALL_COMPONENT MATCHES "^[a-zA-Z0-9_.+-]+$")
-    set(CMAKE_INSTALL_MANIFEST "install_manifest_${CMAKE_INSTALL_COMPONENT}.txt")
-  else()
-    string(MD5 CMAKE_INST_COMP_HASH "${CMAKE_INSTALL_COMPONENT}")
-    set(CMAKE_INSTALL_MANIFEST "install_manifest_${CMAKE_INST_COMP_HASH}.txt")
-    unset(CMAKE_INST_COMP_HASH)
-  endif()
-else()
-  set(CMAKE_INSTALL_MANIFEST "install_manifest.txt")
-endif()
-
-if(NOT CMAKE_INSTALL_LOCAL_ONLY)
-  file(WRITE "/Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter/build_phase0/${CMAKE_INSTALL_MANIFEST}"
-     "${CMAKE_INSTALL_MANIFEST_CONTENT}")
-endif()
-
-===== FILE: ./build_reference/cmake_install.cmake =====
-# Install script for directory: /Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter
-
-# Set the install prefix
-if(NOT DEFINED CMAKE_INSTALL_PREFIX)
-  set(CMAKE_INSTALL_PREFIX "/usr/local")
-endif()
-string(REGEX REPLACE "/$" "" CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
-
-# Set the install configuration name.
-if(NOT DEFINED CMAKE_INSTALL_CONFIG_NAME)
-  if(BUILD_TYPE)
-    string(REGEX REPLACE "^[^A-Za-z0-9_]+" ""
-           CMAKE_INSTALL_CONFIG_NAME "${BUILD_TYPE}")
-  else()
-    set(CMAKE_INSTALL_CONFIG_NAME "Debug")
-  endif()
-  message(STATUS "Install configuration: \"${CMAKE_INSTALL_CONFIG_NAME}\"")
-endif()
-
-# Set the component getting installed.
-if(NOT CMAKE_INSTALL_COMPONENT)
-  if(COMPONENT)
-    message(STATUS "Install component: \"${COMPONENT}\"")
-    set(CMAKE_INSTALL_COMPONENT "${COMPONENT}")
-  else()
-    set(CMAKE_INSTALL_COMPONENT)
-  endif()
-endif()
-
-# Is this installation the result of a crosscompile?
-if(NOT DEFINED CMAKE_CROSSCOMPILING)
-  set(CMAKE_CROSSCOMPILING "FALSE")
-endif()
-
-# Set path to fallback-tool for dependency-resolution.
-if(NOT DEFINED CMAKE_OBJDUMP)
-  set(CMAKE_OBJDUMP "/usr/bin/objdump")
-endif()
-
-if(NOT CMAKE_INSTALL_LOCAL_ONLY)
-  # Include the install script for the subdirectory.
-  include("/Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter/build_reference/JUCE/cmake_install.cmake")
-endif()
-
-string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
-       "${CMAKE_INSTALL_MANIFEST_FILES}")
-if(CMAKE_INSTALL_LOCAL_ONLY)
-  file(WRITE "/Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter/build_reference/install_local_manifest.txt"
-     "${CMAKE_INSTALL_MANIFEST_CONTENT}")
-endif()
-if(CMAKE_INSTALL_COMPONENT)
-  if(CMAKE_INSTALL_COMPONENT MATCHES "^[a-zA-Z0-9_.+-]+$")
-    set(CMAKE_INSTALL_MANIFEST "install_manifest_${CMAKE_INSTALL_COMPONENT}.txt")
-  else()
-    string(MD5 CMAKE_INST_COMP_HASH "${CMAKE_INSTALL_COMPONENT}")
-    set(CMAKE_INSTALL_MANIFEST "install_manifest_${CMAKE_INST_COMP_HASH}.txt")
-    unset(CMAKE_INST_COMP_HASH)
-  endif()
-else()
-  set(CMAKE_INSTALL_MANIFEST "install_manifest.txt")
-endif()
-
-if(NOT CMAKE_INSTALL_LOCAL_ONLY)
-  file(WRITE "/Volumes/CMB_SSD/CompassMemory/2_Projects/CompassMasteringLimiter/3_Code/CompassMasteringLimiter/build_reference/${CMAKE_INSTALL_MANIFEST}"
-     "${CMAKE_INSTALL_MANIFEST_CONTENT}")
-endif()
-
-===== FILE: ./CMakeLists.txt =====
-cmake_minimum_required(VERSION 3.18)
-project(CompassMasteringLimiter VERSION 0.0.1)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-add_subdirectory(JUCE)
-
-add_subdirectory(reference_core EXCLUDE_FROM_ALL)
-add_subdirectory(reference_harness EXCLUDE_FROM_ALL)
-add_subdirectory(reference_tests EXCLUDE_FROM_ALL)
-
-juce_add_plugin(CompassMasteringLimiter
-    COMPANY_NAME "Compass"
-    IS_SYNTH FALSE
-    NEEDS_MIDI_INPUT FALSE
-    NEEDS_MIDI_OUTPUT FALSE
-    IS_MIDI_EFFECT FALSE
-    COPY_PLUGIN_AFTER_BUILD FALSE
-    PLUGIN_MANUFACTURER_CODE Comp
-    PLUGIN_CODE CML1
-    FORMATS VST3
-    PRODUCT_NAME "Compass Mastering Limiter"
-)
-
-add_custom_command(TARGET CompassMasteringLimiter_VST3 POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "$ENV{HOME}/Library/Audio/Plug-Ins/VST3"
-    COMMAND ${CMAKE_COMMAND} -E rm -rf "$ENV{HOME}/Library/Audio/Plug-Ins/VST3/Compass Mastering Limiter.vst3"
-    COMMAND ${CMAKE_COMMAND} -E create_symlink
-            "${CMAKE_CURRENT_BINARY_DIR}/CompassMasteringLimiter_artefacts/VST3/Compass Mastering Limiter.vst3"
-            "$ENV{HOME}/Library/Audio/Plug-Ins/VST3/Compass Mastering Limiter.vst3"
-    VERBATIM
-)
-
-target_sources(CompassMasteringLimiter PRIVATE
-    Source/Plugin/PluginProcessor.cpp
-    Source/Plugin/PluginProcessor.h
-    Source/Plugin/PluginEditor.cpp
-    Source/Plugin/PluginEditor.h
-)
-
-target_compile_definitions(CompassMasteringLimiter PRIVATE
-    JUCE_WEB_BROWSER=0
-    JUCE_USE_CURL=0
-    JUCE_VST3_CAN_REPLACE_VST2=0
-)
-
-target_link_libraries(CompassMasteringLimiter PRIVATE
-    juce::juce_audio_utils
-    juce::juce_dsp
-    juce::juce_gui_extra
-)
-
-===== FILE: ./JUCE/CMakeLists.txt =====
-# ==============================================================================
-#
-#  This file is part of the JUCE framework.
-#  Copyright (c) Raw Material Software Limited
-#
-#  JUCE is an open source framework subject to commercial or open source
-#  licensing.
-#
-#  By downloading, installing, or using the JUCE framework, or combining the
-#  JUCE framework with any other source code, object code, content or any other
-#  copyrightable work, you agree to the terms of the JUCE End User Licence
-#  Agreement, and all incorporated terms including the JUCE Privacy Policy and
-#  the JUCE Website Terms of Service, as applicable, which will bind you. If you
-#  do not agree to the terms of these agreements, we will not license the JUCE
-#  framework to you, and you must discontinue the installation or download
-#  process and cease use of the JUCE framework.
-#
-#  JUCE End User Licence Agreement: https://juce.com/legal/juce-8-licence/
-#  JUCE Privacy Policy: https://juce.com/juce-privacy-policy
-#  JUCE Website Terms of Service: https://juce.com/juce-website-terms-of-service/
-#
-#  Or:
-#
-#  You may also use this code under the terms of the AGPLv3:
-#  https://www.gnu.org/licenses/agpl-3.0.en.html
-#
-#  THE JUCE FRAMEWORK IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL
-#  WARRANTIES, WHETHER EXPRESSED OR IMPLIED, INCLUDING WARRANTY OF
-#  MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, ARE DISCLAIMED.
-#
-# ==============================================================================
-
-cmake_minimum_required(VERSION 3.22)
-
-project(JUCE VERSION 8.0.12 LANGUAGES C CXX)
-
-include(CMakeDependentOption)
-
-set_property(GLOBAL PROPERTY USE_FOLDERS YES)
-
-set(JUCE_MODULES_DIR "${JUCE_SOURCE_DIR}/modules" CACHE INTERNAL
-    "The path to JUCE modules")
-
-# This option will disable most of the JUCE helper functions and tools. This option exists to
-# facilitate existing CMake builds which handle things like bundle creation, icons, plists, and
-# binary data independently of JUCE. This option is not recommended - use at your own risk!
-
-option(JUCE_MODULES_ONLY "Only configure the JUCE modules" OFF)
-
-include(extras/Build/CMake/JUCEModuleSupport.cmake)
-
-# This option controls whether dummy targets are added to the build, where these targets contain all
-# of the source files for each JUCE module. If you're planning to use an IDE and want to be able to
-# browse all of JUCE's source files, this may be useful. However, it will increase the size of
-# generated IDE projects and might slow down configuration a bit. If you enable this, you should
-# probably also add `set_property(GLOBAL PROPERTY USE_FOLDERS YES)` to your top level CMakeLists,
-# otherwise the module sources will be added directly to the top level of the project, instead of in
-# a nice 'Modules' subfolder.
-
-cmake_dependent_option(JUCE_ENABLE_MODULE_SOURCE_GROUPS
-    "Show all module sources in IDE projects" OFF
-    "NOT JUCE_MODULES_ONLY" OFF)
-
-add_subdirectory(modules)
-
-if(JUCE_MODULES_ONLY)
-    return()
-endif()
-
-include(extras/Build/CMake/JUCEUtils.cmake)
-
-set_directory_properties(PROPERTIES
-    JUCE_COMPANY_NAME       "JUCE"
-    JUCE_COMPANY_WEBSITE    "https://juce.com"
-    JUCE_COMPANY_EMAIL      "info@juce.com"
-    JUCE_COMPANY_COPYRIGHT  "Copyright (c) - Raw Material Software Limited")
-
-option(JUCE_COPY_PLUGIN_AFTER_BUILD
-    "Whether or not plugins should be installed to the system after building" OFF)
-set_property(GLOBAL PROPERTY JUCE_COPY_PLUGIN_AFTER_BUILD ${JUCE_COPY_PLUGIN_AFTER_BUILD})
-
-set(CMAKE_CXX_EXTENSIONS FALSE)
-
-juce_disable_default_flags()
-
-add_subdirectory(extras/Build)
-
-# If you want to build the JUCE examples with VST2/AAX/ARA support, you'll need to make the
-# VST2/AAX/ARA headers visible to the juce_audio_processors module. You can either set the paths on
-# the command line, (e.g. -DJUCE_GLOBAL_AAX_SDK_PATH=/path/to/sdk) if you're just building the JUCE
-# examples, or you can call the `juce_set_*_sdk_path` functions in your own CMakeLists after
-# importing JUCE.
-
-if(JUCE_GLOBAL_AAX_SDK_PATH)
-    juce_set_aax_sdk_path("${JUCE_GLOBAL_AAX_SDK_PATH}")
-endif()
-
-if(JUCE_GLOBAL_VST2_SDK_PATH)
-    juce_set_vst2_sdk_path("${JUCE_GLOBAL_VST2_SDK_PATH}")
-endif()
-
-# The ARA_SDK path should point to the "Umbrella installer" ARA_SDK directory.
-# The directory can be obtained by recursively cloning https://github.com/Celemony/ARA_SDK and
-# checking out the tag releases/2.1.0.
-if(JUCE_GLOBAL_ARA_SDK_PATH)
-    juce_set_ara_sdk_path("${JUCE_GLOBAL_ARA_SDK_PATH}")
-endif()
-
-# We don't build anything other than the juceaide by default, because we want to keep configuration
-# speedy and the number of targets low. If you want to add targets for the extra projects and
-# example PIPs (there's a lot of them!), specify -DJUCE_BUILD_EXAMPLES=ON and/or
-# -DJUCE_BUILD_EXTRAS=ON when initially generating your build tree.
-
-option(JUCE_BUILD_EXTRAS "Add build targets for the Projucer and other tools" OFF)
-
-if(JUCE_BUILD_EXTRAS)
-    add_subdirectory(extras)
-endif()
-
-option(JUCE_BUILD_EXAMPLES "Add build targets for the DemoRunner and PIPs" OFF)
-
-if(JUCE_BUILD_EXAMPLES)
-    add_subdirectory(examples)
-endif()
-
-string(CONCAT webview2_option_message "Location that overrides the default directory where our "
-                                      "FindWebView2 script is looking for the "
-                                      "*Microsoft.Web.WebView2* directory")
-
-option(JUCE_WEBVIEW2_PACKAGE_LOCATION ${webview2_option_message} "")
-
-# ==================================================================================================
-# Install configuration
-
-include(CMakePackageConfigHelpers)
-write_basic_package_version_file("${JUCE_BINARY_DIR}/JUCEConfigVersion.cmake"
-    VERSION ${JUCE_VERSION}
-    COMPATIBILITY ExactVersion)
-
-set(JUCE_INSTALL_DESTINATION "lib/cmake/JUCE-${JUCE_VERSION}" CACHE STRING
-    "The location, relative to the install prefix, where the JUCE config file will be installed")
-
-set(JUCE_MODULE_PATH "include/JUCE-${JUCE_VERSION}/modules")
-set(UTILS_INSTALL_DIR "${JUCE_INSTALL_DESTINATION}")
-set(JUCEAIDE_PATH "${JUCE_TOOL_INSTALL_DIR}/${JUCE_JUCEAIDE_NAME}")
-configure_package_config_file("${JUCE_CMAKE_UTILS_DIR}/JUCEConfig.cmake.in"
-    "${JUCE_BINARY_DIR}/JUCEConfig.cmake"
-    PATH_VARS UTILS_INSTALL_DIR JUCEAIDE_PATH JUCE_MODULE_PATH
-    INSTALL_DESTINATION "${JUCE_INSTALL_DESTINATION}")
-
-set(JUCE_MODULE_PATH "${JUCE_MODULES_DIR}")
-set(UTILS_INSTALL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/extras/Build/CMake")
-get_target_property(JUCEAIDE_PATH juceaide IMPORTED_LOCATION)
-configure_package_config_file("${JUCE_CMAKE_UTILS_DIR}/JUCEConfig.cmake.in"
-    "${JUCE_BINARY_DIR}/JUCEExportConfig.cmake"
-    PATH_VARS UTILS_INSTALL_DIR JUCEAIDE_PATH JUCE_MODULE_PATH
-    INSTALL_PREFIX "${CMAKE_CURRENT_BINARY_DIR}"
-    INSTALL_DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
-
-install(FILES "${JUCE_BINARY_DIR}/JUCEConfigVersion.cmake"
-              "${JUCE_BINARY_DIR}/JUCEConfig.cmake"
-              "${JUCE_CMAKE_UTILS_DIR}/JUCECheckAtomic.cmake"
-              "${JUCE_CMAKE_UTILS_DIR}/JUCEHelperTargets.cmake"
-              "${JUCE_CMAKE_UTILS_DIR}/JUCEModuleSupport.cmake"
-              "${JUCE_CMAKE_UTILS_DIR}/JUCEUtils.cmake"
-              "${JUCE_CMAKE_UTILS_DIR}/JuceLV2Defines.h.in"
-              "${JUCE_CMAKE_UTILS_DIR}/LaunchScreen.storyboard"
-              "${JUCE_CMAKE_UTILS_DIR}/PIPAudioProcessor.cpp.in"
-              "${JUCE_CMAKE_UTILS_DIR}/PIPAudioProcessorWithARA.cpp.in"
-              "${JUCE_CMAKE_UTILS_DIR}/PIPComponent.cpp.in"
-              "${JUCE_CMAKE_UTILS_DIR}/PIPConsole.cpp.in"
-              "${JUCE_CMAKE_UTILS_DIR}/RecentFilesMenuTemplate.nib"
-              "${JUCE_CMAKE_UTILS_DIR}/UnityPluginGUIScript.cs.in"
-              "${JUCE_CMAKE_UTILS_DIR}/checkBundleSigning.cmake"
-              "${JUCE_CMAKE_UTILS_DIR}/copyDir.cmake"
-              "${JUCE_CMAKE_UTILS_DIR}/juce_runtime_arch_detection.cpp"
-              "${JUCE_CMAKE_UTILS_DIR}/juce_LinuxSubprocessHelper.cpp"
-        DESTINATION "${JUCE_INSTALL_DESTINATION}")
-
-if(("${CMAKE_SOURCE_DIR}" STREQUAL "${JUCE_SOURCE_DIR}") AND (NOT JUCE_BUILD_HELPER_TOOLS))
-    _juce_add_lv2_manifest_helper_target()
-
-    if(TARGET juce_lv2_helper)
-        install(TARGETS juce_lv2_helper EXPORT LV2_HELPER DESTINATION "bin/JUCE-${JUCE_VERSION}")
-        install(EXPORT LV2_HELPER NAMESPACE juce:: DESTINATION "${JUCE_INSTALL_DESTINATION}")
-    endif()
-endif()
-
-===== FILE: ./reference_core/CMakeLists.txt =====
-add_library(reference_core INTERFACE)
-target_include_directories(reference_core INTERFACE
-    ${CMAKE_CURRENT_LIST_DIR}/include
-)
-
-===== FILE: ./reference_harness/CMakeLists.txt =====
-add_executable(reference_harness
-    Source/main.cpp
-)
-
-target_link_libraries(reference_harness PRIVATE
-    reference_core
-)
-
-===== FILE: ./reference_tests/CMakeLists.txt =====
-add_executable(reference_tests
-    Source/main.cpp
-)
-
-target_link_libraries(reference_tests PRIVATE
-    reference_core
-)
-
-===== FILE: Source/Plugin/PluginEditor.cpp =====
+=== TREE ===
+Source/Plugin/PluginEditor.cpp
+Source/Plugin/PluginEditor.h
+Source/Plugin/PluginProcessor.cpp
+Source/Plugin/PluginProcessor.h
+reference_core/include/reference_core/reference_core.h
+reference_harness/Source/main.cpp
+reference_tests/Source/main.cpp
+
+=== FILE DUMP ===
+
+===== FILE: ./Source/Plugin/PluginEditor.cpp =====
 #include "PluginEditor.h"
 
 static void setRotary (juce::Slider& s)
@@ -659,7 +267,7 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
     ceilingLabel.setBounds (m.getX() + padX, y4, m.getWidth() - (2 * padX), rowH);
 }
 
-===== FILE: Source/Plugin/PluginEditor.h =====
+===== FILE: ./Source/Plugin/PluginEditor.h =====
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <cmath>
@@ -748,7 +356,7 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompassMasteringLimiterAudioProcessorEditor)
 };
 
-===== FILE: Source/Plugin/PluginProcessor.cpp =====
+===== FILE: ./Source/Plugin/PluginProcessor.cpp =====
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
@@ -1374,12 +982,18 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
             yNext = juce::jmax (yNext, xT);
         }
 
-        // Phase 1.4 — GR output state slew limiting (dB domain, per-sample hard cap).
-        // Canonical enforcement (spec-binding):
-        // maxStepDb = 0.01
-        // ySlewed = yPrev + jlimit(-maxStepDb, +maxStepDb, (yNext - yPrev))
-        constexpr double maxStepDb = 0.01;
-        x1 = yPrev + juce::jlimit (-maxStepDb, +maxStepDb, (yNext - yPrev));
+        // Phase 1.4 — GR output state slew limiting (dB domain, time-consistent)
+        // These are the real sonic targets — tune these numbers by ear later
+        constexpr double maxAttackDbPerSec  = 18000.0;   // ~18,000 dB/s = very fast, catches most transients
+        constexpr double maxReleaseDbPerSec = 1800.0;    // 10× slower = musical recovery, no pumping
+
+        // Convert to per-sample limits using the actual time step (dt)
+        const double maxAttackDb  = maxAttackDbPerSec  * dt;
+        const double maxReleaseDb = maxReleaseDbPerSec * dt;
+
+        // Apply asymmetric slew
+        const double delta = yNext - yPrev;
+        x1 = yPrev + juce::jlimit (-maxReleaseDb, maxAttackDb, delta);
 
         // Downstream clamp(s) (existing) apply after enforcement.
         x1 = juce::jlimit (0.0, kMaxAttnDb, x1);
@@ -1778,8 +1392,6 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
                         skipOsFastPath = true;
                 }
             }
-
-            skipOsFastPath = false;
 
             if (! skipOsFastPath)
             {
@@ -2434,7 +2046,7 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
     return new CompassMasteringLimiterAudioProcessor();
 }
 
-===== FILE: Source/Plugin/PluginProcessor.h =====
+===== FILE: ./Source/Plugin/PluginProcessor.h =====
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -2819,3 +2431,135 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompassMasteringLimiterAudioProcessor)
 };
 
+===== FILE: ./reference_core/include/reference_core/reference_core.h =====
+#pragma once
+
+#include <cmath>
+#include <cstdint>
+
+namespace reference_core
+{
+    constexpr const char* kReferenceCoreId = "reference_core_v1";
+
+    // Phase 1.1 — Canonical Signal Domains (LOCKED)
+    //
+    // 1) Detector domain (DetectorLin):
+    //    - Oversampled reconstruction domain used for true-peak style measurement.
+    //    - Linear amplitude (not dB). Measurement helpers convert DetectorLin -> dBTP.
+    //
+    // 2) Control domain (ControlDb):
+    //    - All GR and envelope values live here, in dB (attenuation is >= 0 dB).
+    //
+    // 3) Apply domain (ApplyLin):
+    //    - Final authoritative scaling domain applied to samples at the end.
+    //    - Linear amplitude scale factor, derived from ControlDb.
+
+    enum class Domain : std::uint8_t
+    {
+        DetectorLin = 0,
+        ControlDb   = 1,
+        ApplyLin    = 2
+    };
+
+    constexpr double kDbEpsLin = 1.0e-20;
+
+    // Phase 1.1 — Domain Audit Hooks (TEST-ONLY) (LOCKED)
+    // Instrumentation points only. This does not “detect all illegal math” automatically.
+    // It provides counters for explicit audit touchpoints used by tests.
+
+#if defined(REFERENCE_CORE_ENABLE_DOMAIN_AUDIT) && (REFERENCE_CORE_ENABLE_DOMAIN_AUDIT == 1)
+
+    struct DomainAudit final
+    {
+        std::uint32_t linearToDbCalls = 0;
+        std::uint32_t controlStoresNotDb = 0;
+
+        void reset() noexcept
+        {
+            linearToDbCalls = 0;
+            controlStoresNotDb = 0;
+        }
+    };
+
+    inline DomainAudit& domainAudit() noexcept
+    {
+        static DomainAudit a;
+        return a;
+    }
+
+    inline void auditControlSignalStore (Domain storedDomain) noexcept
+    {
+        if (storedDomain != Domain::ControlDb)
+            ++domainAudit().controlStoresNotDb;
+    }
+
+#else
+
+    struct DomainAudit final
+    {
+        void reset() noexcept {}
+    };
+
+    inline DomainAudit& domainAudit() noexcept
+    {
+        static DomainAudit a;
+        return a;
+    }
+
+    inline void auditControlSignalStore (Domain) noexcept {}
+
+#endif
+
+    // Phase 1.1 — Conversion Utilities (SANCTIONED) (LOCKED)
+    // Control domain uses attenuation dB (attnDb >= 0). Apply domain uses linear scale.
+    // dBTP ceiling is amplitude-referenced (may be <= 0).
+
+    inline double dbToLinear (double attnDb) noexcept
+    {
+        if (! std::isfinite (attnDb)) return 0.0;
+        if (attnDb <= 0.0) return 1.0;
+        return std::pow (10.0, -attnDb / 20.0);
+    }
+
+    inline double linearToDb (double scaleLin) noexcept
+    {
+#if defined(REFERENCE_CORE_ENABLE_DOMAIN_AUDIT) && (REFERENCE_CORE_ENABLE_DOMAIN_AUDIT == 1)
+        ++domainAudit().linearToDbCalls;
+#endif
+        if (! std::isfinite (scaleLin) || scaleLin <= 0.0) return 120.0;
+        return -20.0 * std::log10 (scaleLin + kDbEpsLin);
+    }
+
+    inline double dbtpToLinearCeiling (double ceilingDbtp) noexcept
+    {
+        if (! std::isfinite (ceilingDbtp)) return 0.0;
+        return std::pow (10.0, ceilingDbtp / 20.0);
+    }
+}
+
+===== FILE: ./reference_harness/Source/main.cpp =====
+#include <iostream>
+#include "reference_core/reference_core.h"
+
+int main()
+{
+    std::cout << "reference_harness OK " << reference_core::kReferenceCoreId << "\n";
+    return 0;
+}
+
+===== FILE: ./reference_tests/Source/main.cpp =====
+#include <iostream>
+#include "reference_core/reference_core.h"
+
+int main()
+{
+    const bool ok = (reference_core::kReferenceCoreId != nullptr);
+    if (! ok)
+    {
+        std::cout << "reference_tests FAIL\n";
+        return 1;
+    }
+
+    std::cout << "reference_tests PASS\n";
+    return 0;
+}

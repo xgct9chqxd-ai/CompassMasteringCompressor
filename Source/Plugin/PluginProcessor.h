@@ -324,6 +324,10 @@ private:
 
     // Phase 1.9 — Silence-horizon bounded memory (per-channel sample counter)
     std::array<int, 2> silenceCountSamples { 0, 0 };
+
+    // Phase 1.6 — Stereo link transition smoothing (7 ms one-pole on control only)
+    double lastLink01Smoothed = 1.0;
+
     // Guards + Safety Rails (Gate-10):
     // - Hard bounds: attenuation depth already clamped via kMaxAttnDb in processBlock
     // - Slew limiting: prevents extreme step changes from bad automation or math glitches
