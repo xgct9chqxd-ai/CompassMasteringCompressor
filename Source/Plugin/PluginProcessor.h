@@ -100,6 +100,20 @@ public:
         return (float) juce::jlimit (-120.0f, 60.0f, v);
     }
 
+    bool getCurrentClampGlue01 (float& outClamp01, float& outGlue01) const noexcept
+    {
+        MeterSnapshot s{};
+        if (! readMeters (s))
+            return false;
+
+        const float c = juce::jmax (s.clamp01[0], s.clamp01[1]);
+        const float g = juce::jmax (s.glue01[0],  s.glue01[1]);
+
+        outClamp01 = juce::jlimit (0.0f, 1.0f, c);
+        outGlue01  = juce::jlimit (0.0f, 1.0f, g);
+        return true;
+    }
+
     // Phase 1.4 — deterministic probes (non-realtime; callable from tests/debug harness)
     double probeSettleTimeSec (double sampleRate) const noexcept;
     bool probeContinuityFastAutomation (double sampleRate, double& outMaxAbsDeltaDb) const noexcept;
@@ -123,6 +137,9 @@ private:
 
         double   crestPreDb    = 0.0;
         double   crestPostDb   = 0.0;
+
+        float   clamp01[2]     { 0.0f, 0.0f };
+        float   glue01[2]      { 1.0f, 1.0f };
 
         uint64_t frameCounter  = 0; // monotonic debug-only counter
     };

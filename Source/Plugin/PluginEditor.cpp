@@ -18,8 +18,7 @@ static void setRotary (juce::Slider& s)
 CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcessorEditor (CompassMasteringLimiterAudioProcessor& p)
 : juce::AudioProcessorEditor (&p), processor (p)
 {
-    setResizable (false, false);
-    setSize (820, 360);
+    setSize (900, 420);
 
     setRotary (drive);
     addAndMakeVisible (drive);
@@ -108,10 +107,45 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
     ceilingLabel.setText ("CEILING: -1.0 dBTP", juce::dontSendNotification);
     addAndMakeVisible (ceilingLabel);
 
+    // Trim knob setup
+    setRotary (trim);
+    addAndMakeVisible (trim);
+
+    trimLabel.setText ("Trim", juce::dontSendNotification);
+    trimLabel.setJustificationType (juce::Justification::centred);
+    trimLabel.setFont (juce::Font (12.5f));
+    trimLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    addAndMakeVisible (trimLabel);
+    trimLabel.setInterceptsMouseClicks (false, false);
+
+    // Value readouts under top rotaries (display-only)
+    auto initValueLabel = [&] (juce::Label& l)
+    {
+        l.setJustificationType (juce::Justification::centred);
+        l.setFont (juce::Font (12.5f));
+        l.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+        l.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+        l.setInterceptsMouseClicks (false, false);
+        addAndMakeVisible (l);
+    };
+
+    initValueLabel (trimValueLabel);
+    initValueLabel (glueValueLabel);
+    initValueLabel (ceilingValueLabel);
+
+    // Meters visibility + clamp/glue flags
+    addAndMakeVisible (inTpMeter);
+    addAndMakeVisible (outTpMeter);
+    addAndMakeVisible (clampMeter);
+    addAndMakeVisible (glueMeter);
+    clampMeter.setIsClamp (true);
+    glueMeter.setIsClamp (false);
+
     auto& vts = processor.getAPVTS();
 
     driveA   = std::make_unique<APVTS::SliderAttachment> (vts, "drive", drive);
     ceilingA = std::make_unique<APVTS::SliderAttachment> (vts, "ceiling", ceiling);
+    trimA    = std::make_unique<APVTS::SliderAttachment> (vts, "trim", trim);
     biasA    = std::make_unique<APVTS::ComboBoxAttachment> (vts, "adaptive_bias", adaptiveBias);
     linkA    = std::make_unique<APVTS::SliderAttachment> (vts, "stereo_link", stereoLink);
     osA      = std::make_unique<APVTS::ComboBoxAttachment> (vts, "oversampling_min", oversamplingMin);
@@ -126,14 +160,27 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
     grMeter.pushValueDb (current);
     currentGrLabel.setText (juce::String::formatted ("%.1f dB", current), juce::dontSendNotification);
 
+    // Top rotary value readouts (APVTS raw values)
+    auto& vts = processor.getAPVTS();
+    const float trimDb   = vts.getRawParameterValue ("trim")->load();
+    const float glueDb   = vts.getRawParameterValue ("drive")->load();
+    const float ceilDbTP = vts.getRawParameterValue ("ceiling")->load();
+
+    trimValueLabel.setText    (juce::String::formatted ("%.1f dB",   trimDb),   juce::dontSendNotification);
+    glueValueLabel.setText    (juce::String::formatted ("%.1f dB",   glueDb),   juce::dontSendNotification);
+    ceilingValueLabel.setText (juce::String::formatted ("%.1f dBTP", ceilDbTP), juce::dontSendNotification);
+
     float inTp = -120.0f;
     float outTp = -120.0f;
     if (processor.getCurrentTruePeakDbTP (inTp, outTp))
     {
-        inTp = juce::jmax (-120.0f, inTp);
-        outTp = juce::jmax (-120.0f, outTp);
-        inTpLabel.setText (juce::String::formatted ("IN TP: %.1f dBTP", inTp), juce::dontSendNotification);
-        outTpLabel.setText (juce::String::formatted ("OUT TP: %.1f dBTP", outTp), juce::dontSendNotification);
+        inTpMeter.pushValueDb (inTp);
+        outTpMeter.pushValueDb (outTp);
+        inTpMeter.repaint();
+        outTpMeter.repaint();
+
+        inTpLabel.setText  (juce::String::formatted ("IN TP: %.1f",  inTp),  juce::dontSendNotification);
+        outTpLabel.setText (juce::String::formatted ("OUT TP: %.1f", outTp), juce::dontSendNotification);
     }
 
     float lufsS = -120.0f;
@@ -142,6 +189,7 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
     {
         lufsS = juce::jmax (-120.0f, lufsS);
         lufsI = juce::jmax (-120.0f, lufsI);
+
         lufsSLabel.setText (juce::String::formatted ("LUFS-S: %.1f", lufsS), juce::dontSendNotification);
         lufsILabel.setText (juce::String::formatted ("LUFS-I: %.1f", lufsI), juce::dontSendNotification);
     }
@@ -152,12 +200,7 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
     {
         inPk = juce::jmax (-120.0f, inPk);
         outPk = juce::jmax (-120.0f, outPk);
-        inPeakLabel.setText (juce::String::formatted ("IN PEAK: %.1f dBFS", inPk), juce::dontSendNotification);
-        outPeakLabel.setText (juce::String::formatted ("OUT PEAK: %.1f dBFS", outPk), juce::dontSendNotification);
     }
-
-    const float ceilDb = processor.getCurrentCeilingDbTP();
-    ceilingLabel.setText (juce::String::formatted ("CEILING: %.1f dBTP", ceilDb), juce::dontSendNotification);
 
     grMeter.repaint();
 }
@@ -190,67 +233,133 @@ void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
 
 void CompassMasteringLimiterAudioProcessorEditor::resized()
 {
-    auto b = getLocalBounds().reduced (16);
-    b.removeFromTop (30);
+    // Local geometry constants (single source of truth for this layout function)
+    const int knobSize        = 100;
+    const int knobGap         = 15;
+    const int knobRowExtraH   = 40;
+    const int valueLabelDY    = 4;
+    const int valueLabelH     = 20;
 
-    const int knob = 104;
-    const int gap  = 16;
+    const int behaviorW       = 220;
+    const int behaviorGap     = 40;
+    const int behaviorTrimTop = 8;
+    const int behaviorH       = 28;
 
-    auto row = b.removeFromTop (knob + 30);
+    const int grTrimLR        = 80;
+    const int grLabelW        = 120;
+    const int grLabelH        = 30;
+    const int grLabelDY       = 10;
 
-    drive.setBounds (row.removeFromLeft (knob));
-    row.removeFromLeft (gap);
-    ceiling.setBounds (row.removeFromLeft (knob));
-    row.removeFromLeft (gap);
+    const int clampGlueGap    = 10;
 
-    adaptiveBias.setBounds (row.removeFromLeft (260).withTrimmedTop (34).withHeight (26));
-    row.removeFromLeft (gap);
-    stereoLink.setBounds (row.removeFromLeft (260).withTrimmedTop (34).withHeight (26));
-    row.removeFromLeft (gap);
-    oversamplingMin.setBounds (row.removeFromLeft (100).withTrimmedTop (34).withHeight (26));
+    const int truthNumW       = 140;
+    const int truthGap        = 20;
 
-    b.removeFromTop (10);
+    // 1) Start with full bounds
+    auto r = getLocalBounds();
 
-    // Primary meter zone (Verification): GR bar + numeric, then truth readouts below.
-    const int grH     = 32;
-    const int colW    = 220;
-    const int padX    = 10;
-    const int rowH    = 18;
-    const int rowGap  = 6;
-    const int topGap  = 10;
+    // 2) Outer frame (insets)
+    auto framed = r.withTrimmedLeft (Layout::insetL)
+                   .withTrimmedRight (Layout::insetR)
+                   .withTrimmedTop (Layout::insetT)
+                   .withTrimmedBottom (Layout::insetB);
 
-    const int truthH  = (rowH * 4) + (rowGap * 3);   // 4 rows: TP, LUFS, PEAK, CEILING
-    const int zoneH   = grH + topGap + truthH;
+    // 3) Carve out left/right TP meter columns
+    auto tpLeftZone = framed.removeFromLeft (Layout::leftTpWidth);
+    auto tpRightZone = framed.removeFromRight (Layout::rightTpWidth);
 
-    auto meterZone = b.removeFromTop (zoneH);
+    // 4) Remainder is the center main zone
+    auto mainZone = framed;
 
-    grMeter.setBounds (meterZone.removeFromTop (grH));
-    auto m = grMeter.getBounds();
+    // 5) Carve vertical bands from main zone (in order)
+    auto bandKnobs = mainZone.removeFromTop (Layout::topKnobBand);
+    mainZone.removeFromTop (Layout::interBandGap);
 
-    // GR numeric (right side of the bar zone)
-    currentGrLabel.setBounds (m.getRight() - 90, m.getY() + 6, 84, 18);
+    auto bandContext = mainZone.removeFromTop (Layout::contextRow);
+    mainZone.removeFromTop (Layout::interBandGap);
 
-    // Truth readouts grid (2-column, multi-row)
-    const int leftX  = m.getX() + padX;
-    const int rightX = m.getRight() - colW - padX;
+    auto bandGR = mainZone.removeFromTop (Layout::grMainZone);
+    mainZone.removeFromTop (Layout::interBandGap);
 
-    const int y1 = meterZone.getY() + 6;             // Row 1
-    const int y2 = y1 + rowH + rowGap;               // Row 2
-    const int y3 = y2 + rowH + rowGap;               // Row 3
-    const int y4 = y3 + rowH + rowGap;               // Row 4 (Ceiling)
+    auto bandMiniBars = mainZone.removeFromTop (Layout::clampGlueBars);
+    mainZone.removeFromTop (Layout::interBandGap);
 
-    // Row 1: IN/OUT TP
-    inTpLabel.setBounds  (leftX,  y1, colW, rowH);
-    outTpLabel.setBounds (rightX, y1, colW, rowH);
+    auto bandTruth = mainZone.removeFromTop (Layout::truthStrip);
 
-    // Row 2: LUFS-S / LUFS-I
-    lufsSLabel.setBounds (leftX,  y2, colW, rowH);
-    lufsILabel.setBounds (rightX, y2, colW, rowH);
+    // Tall TP meters
+    inTpMeter.setBounds (tpLeftZone);
+    outTpMeter.setBounds (tpRightZone);
 
-    // Row 3: IN/OUT PEAK
-    inPeakLabel.setBounds  (leftX,  y3, colW, rowH);
-    outPeakLabel.setBounds (rightX, y3, colW, rowH);
+    // Top: three knob columns (identical) inside bandKnobs
+    const int colGap     = 18;
+    const int labelAreaH = 24;
+    const int knobAreaH  = 86;
+    const int valueAreaH = 30;
 
-    // Row 4: CEILING (full width)
-    ceilingLabel.setBounds (m.getX() + padX, y4, m.getWidth() - (2 * padX), rowH);
+    auto cols = bandKnobs;
+
+    const int colsTotalGap = colGap * 2;
+    const int colW = (cols.getWidth() - colsTotalGap) / 3;
+
+    auto col1 = cols.removeFromLeft (colW);
+    cols.removeFromLeft (colGap);
+    auto col2 = cols.removeFromLeft (colW);
+    cols.removeFromLeft (colGap);
+    auto col3 = cols.removeFromLeft (colW);
+
+    auto makeAreas = [&] (juce::Rectangle<int> col)
+    {
+        auto labelArea = col.removeFromTop (labelAreaH);
+        auto knobArea  = col.removeFromTop (knobAreaH);
+        auto valueArea = col.removeFromTop (valueAreaH);
+        return (std::tuple<juce::Rectangle<int>, juce::Rectangle<int>, juce::Rectangle<int>> { labelArea, knobArea, valueArea });
+    };
+
+    {
+        auto [labelArea, knobArea, valueArea] = makeAreas (col1);
+        (void) labelArea;
+        trim.setBounds (knobArea);
+        trimValueLabel.setBounds (valueArea);
+    }
+    {
+        auto [labelArea, knobArea, valueArea] = makeAreas (col2);
+        (void) labelArea;
+        drive.setBounds (knobArea);
+        glueValueLabel.setBounds (valueArea);
+    }
+    {
+        auto [labelArea, knobArea, valueArea] = makeAreas (col3);
+        (void) labelArea;
+        ceiling.setBounds (knobArea);
+        ceilingValueLabel.setBounds (valueArea);
+    }
+
+    // Context band (reserved)
+    (void) bandContext;
+
+    // GR band: header + bar + breathing
+    auto grHeader  = bandGR.removeFromTop (48);
+    auto grBarArea = bandGR.removeFromTop (52);
+
+    adaptiveBias.setBounds (grHeader.removeFromLeft (behaviorW).withTrimmedTop (behaviorTrimTop).withHeight (behaviorH));
+    grHeader.removeFromLeft (behaviorGap);
+    stereoLink.setBounds (grHeader.withTrimmedTop (behaviorTrimTop).withHeight (behaviorH));
+
+    grMeter.setBounds (grBarArea.withTrimmedLeft (grTrimLR).withTrimmedRight (grTrimLR));
+    currentGrLabel.setBounds (grBarArea.withSizeKeepingCentre (grLabelW, grLabelH).translated (0, grLabelDY));
+
+    // Clamp & Glue mini bars
+    clampMeter.setBounds (bandMiniBars.removeFromLeft (bandMiniBars.getWidth() / 2 - clampGlueGap));
+    glueMeter.setBounds  (bandMiniBars.removeFromRight (bandMiniBars.getWidth() / 2 - clampGlueGap));
+
+    // Truth strip: constrained to max width and centered
+    auto truthRow = bandTruth.withSizeKeepingCentre (juce::jmin (Layout::truthMaxWidth, bandTruth.getWidth()),
+                                                    bandTruth.getHeight());
+
+    inTpLabel.setBounds  (truthRow.removeFromLeft (truthNumW));
+    truthRow.removeFromLeft (truthGap);
+    outTpLabel.setBounds (truthRow.removeFromLeft (truthNumW));
+    truthRow.removeFromLeft (truthGap);
+    lufsSLabel.setBounds (truthRow.removeFromLeft (truthNumW));
+    lufsILabel.setBounds (truthRow.removeFromLeft (truthNumW));
 }

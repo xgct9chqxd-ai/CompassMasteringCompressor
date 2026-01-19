@@ -1,4 +1,4 @@
-
+===== FILE BUNDLE BEGIN =====
 
 ===== FILE: Source/Plugin/PluginEditor.cpp =====
 
@@ -112,10 +112,30 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
     ceilingLabel.setText ("CEILING: -1.0 dBTP", juce::dontSendNotification);
     addAndMakeVisible (ceilingLabel);
 
+    // Trim knob setup
+    setRotary (trim);
+    addAndMakeVisible (trim);
+
+    trimLabel.setText ("Trim", juce::dontSendNotification);
+    trimLabel.setJustificationType (juce::Justification::centred);
+    trimLabel.setFont (juce::Font (12.5f));
+    trimLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    addAndMakeVisible (trimLabel);
+    trimLabel.setInterceptsMouseClicks (false, false);
+
+    // Meters visibility + clamp/glue flags
+    addAndMakeVisible (inTpMeter);
+    addAndMakeVisible (outTpMeter);
+    addAndMakeVisible (clampMeter);
+    addAndMakeVisible (glueMeter);
+    clampMeter.setIsClamp (true);
+    glueMeter.setIsClamp (false);
+
     auto& vts = processor.getAPVTS();
 
     driveA   = std::make_unique<APVTS::SliderAttachment> (vts, "drive", drive);
     ceilingA = std::make_unique<APVTS::SliderAttachment> (vts, "ceiling", ceiling);
+    trimA    = std::make_unique<APVTS::SliderAttachment> (vts, "trim", trim);
     biasA    = std::make_unique<APVTS::ComboBoxAttachment> (vts, "adaptive_bias", adaptiveBias);
     linkA    = std::make_unique<APVTS::SliderAttachment> (vts, "stereo_link", stereoLink);
     osA      = std::make_unique<APVTS::ComboBoxAttachment> (vts, "oversampling_min", oversamplingMin);
@@ -128,16 +148,15 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
     const float current = processor.getCurrentGRDb();
 
     grMeter.pushValueDb (current);
-    currentGrLabel.setText (juce::String::formatted ("%.1f dB", current), juce::dontSendNotification);
 
     float inTp = -120.0f;
     float outTp = -120.0f;
     if (processor.getCurrentTruePeakDbTP (inTp, outTp))
     {
-        inTp = juce::jmax (-120.0f, inTp);
-        outTp = juce::jmax (-120.0f, outTp);
-        inTpLabel.setText (juce::String::formatted ("IN TP: %.1f dBTP", inTp), juce::dontSendNotification);
-        outTpLabel.setText (juce::String::formatted ("OUT TP: %.1f dBTP", outTp), juce::dontSendNotification);
+        inTpMeter.pushValueDb (inTp);
+        outTpMeter.pushValueDb (outTp);
+        inTpMeter.repaint();
+        outTpMeter.repaint();
     }
 
     float lufsS = -120.0f;
@@ -146,8 +165,6 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
     {
         lufsS = juce::jmax (-120.0f, lufsS);
         lufsI = juce::jmax (-120.0f, lufsI);
-        lufsSLabel.setText (juce::String::formatted ("LUFS-S: %.1f", lufsS), juce::dontSendNotification);
-        lufsILabel.setText (juce::String::formatted ("LUFS-I: %.1f", lufsI), juce::dontSendNotification);
     }
 
     float inPk = -120.0f;
@@ -156,12 +173,10 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
     {
         inPk = juce::jmax (-120.0f, inPk);
         outPk = juce::jmax (-120.0f, outPk);
-        inPeakLabel.setText (juce::String::formatted ("IN PEAK: %.1f dBFS", inPk), juce::dontSendNotification);
-        outPeakLabel.setText (juce::String::formatted ("OUT PEAK: %.1f dBFS", outPk), juce::dontSendNotification);
     }
 
     const float ceilDb = processor.getCurrentCeilingDbTP();
-    ceilingLabel.setText (juce::String::formatted ("CEILING: %.1f dBTP", ceilDb), juce::dontSendNotification);
+    juce::ignoreUnused (ceilDb);
 
     grMeter.repaint();
 }
@@ -185,7 +200,7 @@ void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
         g.drawText (label, r, juce::Justification::centred, false);
     };
 
-    drawLabelAbove (drive,           "Drive");
+    drawLabelAbove (drive,           "Glue");
     drawLabelAbove (ceiling,         "Ceiling");
     drawLabelAbove (adaptiveBias,    "Adaptive Bias");
     drawLabelAbove (stereoLink,      "Stereo Link");
@@ -197,66 +212,51 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
     auto b = getLocalBounds().reduced (16);
     b.removeFromTop (30);
 
-    const int knob = 104;
-    const int gap  = 16;
+    // Top row: Trim / Glue(drive) / Ceiling, then existing controls in remaining space.
+    auto knobRow = b.removeFromTop (124);
 
-    auto row = b.removeFromTop (knob + 30);
+    trim.setBounds (knobRow.removeFromLeft (104));
+    auto tl = trim.getBounds().translated (0, -18);
+    tl.setHeight (16);
+    trimLabel.setBounds (tl);
+    knobRow.removeFromLeft (16);
 
-    drive.setBounds (row.removeFromLeft (knob));
-    row.removeFromLeft (gap);
-    ceiling.setBounds (row.removeFromLeft (knob));
-    row.removeFromLeft (gap);
+    drive.setBounds (knobRow.removeFromLeft (104));
+    knobRow.removeFromLeft (16);
 
-    adaptiveBias.setBounds (row.removeFromLeft (260).withTrimmedTop (34).withHeight (26));
-    row.removeFromLeft (gap);
-    stereoLink.setBounds (row.removeFromLeft (260).withTrimmedTop (34).withHeight (26));
-    row.removeFromLeft (gap);
-    oversamplingMin.setBounds (row.removeFromLeft (100).withTrimmedTop (34).withHeight (26));
+    ceiling.setBounds (knobRow.removeFromLeft (104));
+    knobRow.removeFromLeft (16);
+
+    // Keep existing horizontal layout behavior, constrained to remaining knobRow.
+    adaptiveBias.setBounds (knobRow.removeFromLeft (260).withTrimmedTop (34).withHeight (26));
+    knobRow.removeFromLeft (16);
+
+    stereoLink.setBounds (knobRow.removeFromLeft (260).withTrimmedTop (34).withHeight (26));
+    knobRow.removeFromLeft (16);
+
+    oversamplingMin.setBounds (knobRow.removeFromLeft (100).withTrimmedTop (34).withHeight (26));
 
     b.removeFromTop (10);
 
-    // Primary meter zone (Verification): GR bar + numeric, then truth readouts below.
-    const int grH     = 32;
-    const int colW    = 220;
-    const int padX    = 10;
-    const int rowH    = 18;
-    const int rowGap  = 6;
-    const int topGap  = 10;
+    // Meter zone: wide centered GR bar, small clamp/glue bars, tall IN/OUT TP meters on edges.
+    auto meterZone = b;
 
-    const int truthH  = (rowH * 4) + (rowGap * 3);   // 4 rows: TP, LUFS, PEAK, CEILING
-    const int zoneH   = grH + topGap + truthH;
-
-    auto meterZone = b.removeFromTop (zoneH);
-
-    grMeter.setBounds (meterZone.removeFromTop (grH));
+    grMeter.setBounds (meterZone.removeFromTop (40).withTrimmedLeft (100).withTrimmedRight (100));
     auto m = grMeter.getBounds();
 
-    // GR numeric (right side of the bar zone)
-    currentGrLabel.setBounds (m.getRight() - 90, m.getY() + 6, 84, 18);
+    // GR numeric (kept; aligned to GR bar)
+    currentGrLabel.setBounds (m.getRight() - 90, m.getY() + 10, 84, 18);
 
-    // Truth readouts grid (2-column, multi-row)
-    const int leftX  = m.getX() + padX;
-    const int rightX = m.getRight() - colW - padX;
+    auto smallMeterRow = meterZone.removeFromTop (24);
+    clampMeter.setBounds (smallMeterRow.removeFromLeft (smallMeterRow.getWidth() / 2 - 8));
+    glueMeter.setBounds  (smallMeterRow.removeFromRight (smallMeterRow.getWidth() / 2 - 8));
 
-    const int y1 = meterZone.getY() + 6;             // Row 1
-    const int y2 = y1 + rowH + rowGap;               // Row 2
-    const int y3 = y2 + rowH + rowGap;               // Row 3
-    const int y4 = y3 + rowH + rowGap;               // Row 4 (Ceiling)
+    inTpMeter.setBounds  (20, meterZone.getY(), 50, meterZone.getHeight());
+    outTpMeter.setBounds (getWidth() - 70, meterZone.getY(), 50, meterZone.getHeight());
 
-    // Row 1: IN/OUT TP
-    inTpLabel.setBounds  (leftX,  y1, colW, rowH);
-    outTpLabel.setBounds (rightX, y1, colW, rowH);
-
-    // Row 2: LUFS-S / LUFS-I
-    lufsSLabel.setBounds (leftX,  y2, colW, rowH);
-    lufsILabel.setBounds (rightX, y2, colW, rowH);
-
-    // Row 3: IN/OUT PEAK
-    inPeakLabel.setBounds  (leftX,  y3, colW, rowH);
-    outPeakLabel.setBounds (rightX, y3, colW, rowH);
-
-    // Row 4: CEILING (full width)
-    ceilingLabel.setBounds (m.getX() + padX, y4, m.getWidth() - (2 * padX), rowH);
+    // Optional small labels under TP meters
+    inTpLabel.setBounds  (20, meterZone.getBottom() - 20, 50, 20);
+    outTpLabel.setBounds (getWidth() - 70, meterZone.getBottom() - 20, 50, 20);
 }
 
 
@@ -307,6 +307,91 @@ private:
     float lastGrDb = 0.0f;
 };
 
+class VerticalPeakMeter final : public juce::Component
+{
+public:
+    void pushValueDb (float newValueDb) noexcept
+    {
+        if (! std::isfinite (newValueDb)) newValueDb = -120.0f;
+
+        newValueDb = juce::jlimit (-120.0f, 6.0f, newValueDb);
+
+        currentPeakDb = newValueDb;
+        if (newValueDb > heldPeakDb) heldPeakDb = newValueDb;
+
+        lastPushedValue = newValueDb;
+    }
+
+    void updatePeakHoldDecay() noexcept
+    {
+        constexpr float decayAlpha = 0.965f;
+
+        if (currentPeakDb < heldPeakDb)
+            heldPeakDb = heldPeakDb * decayAlpha + currentPeakDb * (1.0f - decayAlpha);
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        auto r = getLocalBounds().toFloat();
+
+        g.setColour (juce::Colours::white.withAlpha (0.15f));
+        g.fillRoundedRectangle (r, 6.0f);
+
+        const float fill01 = juce::jlimit (0.0f, 1.0f, (currentPeakDb + 120.0f) / 126.0f);
+        auto fillR = r;
+        fillR.setY (r.getBottom() - r.getHeight() * fill01);
+        fillR.setHeight (r.getHeight() * fill01);
+
+        g.setColour (juce::Colours::white.withAlpha (0.70f));
+        g.fillRoundedRectangle (fillR, 6.0f);
+
+        const float hold01 = juce::jlimit (0.0f, 1.0f, (heldPeakDb + 120.0f) / 126.0f);
+        const float yHold = r.getBottom() - r.getHeight() * hold01;
+
+        g.setColour (juce::Colours::white);
+        g.drawLine (r.getX(), yHold, r.getRight(), yHold, 1.0f);
+    }
+
+private:
+    float currentPeakDb = -120.0f;
+    float heldPeakDb = -120.0f;
+    float lastPushedValue = -120.0f;
+};
+
+class HorizontalClampGlueMeter final : public juce::Component
+{
+public:
+    void pushValue (float val01) noexcept
+    {
+        if (! std::isfinite (val01)) val01 = 0.0f;
+        last01 = juce::jlimit (0.0f, 1.0f, val01);
+    }
+
+    void setIsClamp (bool isClamp) noexcept
+    {
+        clampActive = isClamp;
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        auto r = getLocalBounds().toFloat();
+
+        g.setColour (juce::Colours::white.withAlpha (0.15f));
+        g.fillRoundedRectangle (r, 4.0f);
+
+        auto fillR = r;
+        fillR.setWidth (r.getWidth() * last01);
+
+        const auto fillCol = (clampActive ? juce::Colours::orangered : juce::Colours::limegreen);
+        g.setColour (fillCol.withAlpha (0.70f));
+        g.fillRoundedRectangle (fillR, 4.0f);
+    }
+
+private:
+    float last01 = 0.0f;
+    bool clampActive = false;
+};
+
 class CompassMasteringLimiterAudioProcessorEditor final
     : public juce::AudioProcessorEditor
     , private juce::Timer
@@ -325,11 +410,14 @@ private:
 
     juce::Slider drive;
     juce::Slider ceiling;
+    juce::Slider trim;
     juce::ComboBox adaptiveBias;
     juce::Slider stereoLink;
     juce::ComboBox oversamplingMin;
 
     GRHistoryMeter grMeter;
+    VerticalPeakMeter inTpMeter, outTpMeter;
+    HorizontalClampGlueMeter clampMeter, glueMeter;
     juce::Label currentGrLabel;
     juce::Label inTpLabel;
     juce::Label outTpLabel;
@@ -339,10 +427,12 @@ private:
     juce::Label inPeakLabel;
     juce::Label outPeakLabel;
     juce::Label ceilingLabel;
+    juce::Label trimLabel;
 
     using APVTS = juce::AudioProcessorValueTreeState;
     std::unique_ptr<APVTS::SliderAttachment> driveA;
     std::unique_ptr<APVTS::SliderAttachment> ceilingA;
+    std::unique_ptr<APVTS::SliderAttachment> trimA;
     std::unique_ptr<APVTS::ComboBoxAttachment> biasA;
     std::unique_ptr<APVTS::SliderAttachment> linkA;
     std::unique_ptr<APVTS::ComboBoxAttachment> osA;
@@ -378,7 +468,7 @@ CompassMasteringLimiterAudioProcessor::createParameterLayout()
     // Value ranges are defined exactly per Gate-2 spec.
     layout.add (std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID { "drive", 1 },
-        "Drive",
+        "Glue",
         juce::NormalisableRange<float> { 0.0f, 20.0f, 0.01f },
         0.0f,
         juce::String(),
@@ -425,6 +515,17 @@ CompassMasteringLimiterAudioProcessor::createParameterLayout()
             return juce::jlimit (0.0f, 1.0f, snapped);
         }
     ));
+
+layout.add(std::make_unique<juce::AudioParameterFloat>(
+    juce::ParameterID{"trim", 1},
+    "Trim",
+    juce::NormalisableRange<float>{-20.0f, 20.0f, 0.01f},
+    0.0f,
+    juce::String(),
+    juce::AudioProcessorParameter::genericParameter,
+    [](float v, int) { return juce::String(v, 1) + " dB"; },
+    [](const juce::String& s) { return s.getFloatValue(); }
+));
 
     layout.add (std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID { "stereo_link", 1 },
@@ -518,6 +619,7 @@ void CompassMasteringLimiterAudioProcessor::reset (double sampleRate, int maxBlo
     guardHpState2 = { 0.0, 0.0 };
     guardTotE    = { 0.0, 0.0 };
     guardHiE     = { 0.0, 0.0 };
+    lowShelfZ1   = { 0.0, 0.0 };
 
     // Phase 1.4 — Crest Factor RMS Window (50 ms rectangular MA) + SR_max enforcement
     invalidConfig = (sampleRate > 192000.0);
@@ -555,6 +657,24 @@ void CompassMasteringLimiterAudioProcessor::prepareToPlay (double sampleRate, in
     // Optional deterministic ring init (fixed-size, outside audio thread).
     // This is allowed here (prepareToPlay is not the audio callback boundary).
     meterRing.fill (MeterSnapshot {});
+
+    // Phase 1.x — Hot-path exp/log tables (deterministic; fixed-size; no audio-thread init)
+    {
+        // exp(-x) table, x in [0, kExpMaxX]
+        for (int i = 0; i < kExpTableSize; ++i)
+        {
+            const double t = (kExpTableSize > 1 ? (double) i / (double) (kExpTableSize - 1) : 0.0);
+            const double x = t * kExpMaxX;
+            expNegTable[(size_t) i] = std::exp (-x);
+        }
+
+        // log10 table holds the log-domain values directly: [-12, +6]
+        for (int i = 0; i < kLogTableSize; ++i)
+        {
+            const double t = (kLogTableSize > 1 ? (double) i / (double) (kLogTableSize - 1) : 0.0);
+            log10Table[(size_t) i] = kLogMin + t * kLogRange;
+        }
+    }
 
     // Prebuild oversampling instances (no allocations in audio thread).
     prepareOversampling (ch, samplesPerBlock);
@@ -605,6 +725,50 @@ bool CompassMasteringLimiterAudioProcessor::isBusesLayoutSupported (const BusesL
 double CompassMasteringLimiterAudioProcessor::onePoleAlpha (double tauSec, double dtSec) noexcept
 {
     return std::exp (-dtSec / juce::jmax (1.0e-9, tauSec));
+}
+
+double CompassMasteringLimiterAudioProcessor::expLookup (double x) const noexcept
+{
+    if (! std::isfinite (x) || x <= 0.0)
+        return 1.0;
+
+    if (x >= kExpMaxX)
+        return expNegTable.back();
+
+    const double scaled = x / kExpMaxX;
+    const double pos = scaled * (double) (kExpTableSize - 1);
+    const int idx = (int) std::floor (pos);
+    const double frac = pos - (double) idx;
+
+    const int i0 = juce::jlimit (0, kExpTableSize - 2, idx);
+    const int i1 = i0 + 1;
+
+    const double a = expNegTable[(size_t) i0];
+    const double b = expNegTable[(size_t) i1];
+    return a * (1.0 - frac) + b * frac;
+}
+
+double CompassMasteringLimiterAudioProcessor::log10Lookup (double y) const noexcept
+{
+    if (! std::isfinite (y) || y < 1.0e-12)
+        y = 1.0e-12;
+
+    // Index computation only (per spec). Returned value comes from table interpolation.
+    const double logy = std::log10 (y);
+
+    double scaled = (logy - kLogMin) / kLogRange;
+    scaled = juce::jlimit (0.0, 1.0, scaled);
+
+    const double pos = scaled * (double) (kLogTableSize - 1);
+    const int idx = (int) std::floor (pos);
+    const double frac = pos - (double) idx;
+
+    const int i0 = juce::jlimit (0, kLogTableSize - 2, idx);
+    const int i1 = i0 + 1;
+
+    const double a = log10Table[(size_t) i0];
+    const double b = log10Table[(size_t) i1];
+    return a * (1.0 - frac) + b * frac;
 }
 
 double CompassMasteringLimiterAudioProcessor::probeSettleTimeSec (double sampleRate) const noexcept
@@ -787,13 +951,19 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
             double z1 = guardLpState[(size_t) c];
             double z2 = guardHpState2[(size_t) c];
             const double absS = std::abs (s);
-            const double y = guardNb0 * absS + z1;
+            double y = guardNb0 * absS + z1;
             z1 = guardNb1 * absS - guardNa1 * y + z2;
             z2 = guardNb2 * absS - guardNa2 * y;
             guardLpState[(size_t) c] = z1;
             guardHpState2[(size_t) c] = z2;
-            const double aHf  = std::exp (-dt / kHfTauSec);
-            const double aAcc = std::exp (-dt / kAccTauSec);
+
+            // Measurement-path low-shelf compensation (Phase 1.7 Priority 4)
+            double yShelf = lowShelfB0 * y + lowShelfZ1[(size_t) c];
+            lowShelfZ1[(size_t) c] = lowShelfB1 * y - lowShelfA1 * yShelf;
+            y = yShelf;
+
+            const double aHf  = expLookup (dt / kHfTauSec);
+            const double aAcc = expLookup (dt / kAccTauSec);
 
             // hfSmoothed (tau = 5 ms) stored in guardTotE
             const double hfSm = aHf * guardTotE[(size_t) c] + (1.0 - aHf) * y;
@@ -832,6 +1002,7 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
                 guardHpState2[(size_t) c] = 0.0;
                 guardTotE[(size_t) c]          = 0.0;
                 guardHiE[(size_t) c]           = 0.0;
+                lowShelfZ1[(size_t) c]         = 0.0;
 
                 silenceCountSamples[(size_t) c] = 0;
             }
@@ -890,7 +1061,7 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
         const double energyInput = juce::jmax (0.0, std::pow (10.0, attnTargetDb / 20.0) - 1.0);
 
         const double macroSec = kMacroSecBase * (1.20 - 0.40 * bias01);
-        const double aM = std::exp (-dt / macroSec);
+        const double aM = expLookup (dt / macroSec);
 
         const double Eprev = macroEnergyState[(size_t) c];
         const double u = energyInput;
@@ -987,8 +1158,8 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
 
         const bool isRelease = (xT < yPrev - epsDb);
 
-        const double macroSmooth = (3.0 * macro01 * macro01) - (2.0 * macro01 * macro01 * macro01);
-        const double couple = kCoupleMin + (kCoupleMax - kCoupleMin) * macroSmooth;
+        const double macroCurve = macro01 * macro01 * (10.0 + macro01 * (macro01 * (macro01 * 6.0 - 15.0)));
+        const double couple = kCoupleMin + (kCoupleMax - kCoupleMin) * macroCurve;
         const double microSecEff = isRelease ? (microSecBase * couple) : microSecBase;
 
         const double omega0 = 1.0 / microSecEff;
@@ -998,6 +1169,7 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
 
         x1 += dt * dx1_dt;
         x2 += dt * dx2_dt;
+        if (isRelease) x2 *= 0.98;
 
         // Enforce monotonic convergence without crossing the target (saturate to target only).
         double yNext = x1;
@@ -1020,8 +1192,11 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
         constexpr double maxReleaseDbPerSec = 1800.0;    // 10× slower = musical recovery, no pumping
 
         // Convert to per-sample limits using the actual time step (dt)
+        const double derivNorm = juce::jlimit (0.0, 1.0, tpDerivLin[(size_t) c] / 0.5);
+        const double attackBoost = 1.0 + 0.2 * derivNorm;
+
         const double attackScale = 0.85 + 0.30 * w_cf;
-        const double maxAttackDb  = (maxAttackDbPerSec * attackScale) * dt;
+        const double maxAttackDb  = (maxAttackDbPerSec * attackScale * attackBoost) * dt;
         const double maxReleaseDb = maxReleaseDbPerSec * dt;
 
         // Apply asymmetric slew
@@ -1062,21 +1237,27 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
         };
 
         // HF stress -> grScalar mapping (Phase 1.7)
-        const double hfStress = 10.0 * std::log10 (hfEnergyStereo + 1.0e-12);
+        // Hard containment: prevent log-domain escape (NaN/Inf/negative).
+        if (! std::isfinite (hfEnergyStereo) || hfEnergyStereo <= 0.0)
+            hfEnergyStereo = 0.0;
+
+        const double hfStress = 10.0 * log10Lookup (hfEnergyStereo + 1.0e-12);
         const double stressNorm = juce::jlimit (0.0, 1.0, (hfStress - (-30.0)) / 30.0);
-        double grScalar = 1.0 - 0.25 * smoothstep (stressNorm);
-        grScalar = juce::jlimit (0.75, 1.0, grScalar);
+
+        const double s = smoothstep (stressNorm);
+        double grScalar = 1.0 + 0.25 * s;
+        grScalar = juce::jlimit (1.0, 1.25, grScalar);
 
         // Level-dependent activation via GR average (Phase 1.7)
         const double grAbsDb = juce::jmax (outDbL, outDbR);
-        const double aGr = std::exp (-dt / 0.050);
+        const double aGr = expLookup (dt / 0.050);
         guardGrAvgDb = aGr * guardGrAvgDb + (1.0 - aGr) * grAbsDb;
 
         const double t = juce::jlimit (0.0, 1.0, (guardGrAvgDb - 6.0) / 12.0);
         const double activation = t * t * (t * (t * 6.0 - 15.0) + 10.0);
 
-        double finalScalar = 1.0 - activation * (1.0 - grScalar);
-        finalScalar = juce::jlimit (0.75, 1.0, finalScalar);
+        double finalScalar = 1.0 + activation * (grScalar - 1.0);
+        finalScalar = juce::jlimit (1.0, 1.25, finalScalar);
 
         // Final application (hard-fenced): broadband scaling of post-link GR only
         outDbL *= finalScalar;
@@ -1132,6 +1313,7 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
     lastOutScalar[1] = gR;
 
     constexpr float kEpsAbs = 1.0e-12f;
+    constexpr float kSoftClipK = 0.02f;
     float ceilingLin = (float) std::pow (10.0, ceilingDb / 20.0);
     if (! std::isfinite ((double) ceilingLin) || ceilingLin <= 0.0f)
         ceilingLin = 0.0f;
@@ -1141,11 +1323,15 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
         float x = chPtr[0][i];
         if (! std::isfinite ((double) x)) x = 0.0f;
 
-        const float a = std::abs (x);
-        const float gCeil = (a > kEpsAbs ? (ceilingLin / a) : 1.0e12f);
-        const float gApplied = (gL < gCeil ? gL : gCeil);
+        float y = x * gL;
 
-        float y = x * gApplied;
+        if (ceilingLin > 0.0f)
+        {
+            const float u = y / ceilingLin;
+            if (std::abs (u) > 1.0f)
+                y = ceilingLin * std::tanh (u * kSoftClipK) / kSoftClipK;
+        }
+
         if (! std::isfinite ((double) y)) y = 0.0f;
         chPtr[0][i] = y;
     }
@@ -1155,11 +1341,15 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
         float x = chPtr[1][i];
         if (! std::isfinite ((double) x)) x = 0.0f;
 
-        const float a = std::abs (x);
-        const float gCeil = (a > kEpsAbs ? (ceilingLin / a) : 1.0e12f);
-        const float gApplied = (gR < gCeil ? gR : gCeil);
+        float y = x * gR;
 
-        float y = x * gApplied;
+        if (ceilingLin > 0.0f)
+        {
+            const float u = y / ceilingLin;
+            if (std::abs (u) > 1.0f)
+                y = ceilingLin * std::tanh (u * kSoftClipK) / kSoftClipK;
+        }
+
         if (! std::isfinite ((double) y)) y = 0.0f;
         chPtr[1][i] = y;
     }
@@ -1169,11 +1359,15 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
         float x = chPtr[c][i];
         if (! std::isfinite ((double) x)) x = 0.0f;
 
-        const float a = std::abs (x);
-        const float gCeil = (a > kEpsAbs ? (ceilingLin / a) : 1.0e12f);
-        const float gApplied = (gR < gCeil ? gR : gCeil);
+        float y = x * gR;
 
-        float y = x * gApplied;
+        if (ceilingLin > 0.0f)
+        {
+            const float u = y / ceilingLin;
+            if (std::abs (u) > 1.0f)
+                y = ceilingLin * std::tanh (u * kSoftClipK) / kSoftClipK;
+        }
+
         if (! std::isfinite ((double) y)) y = 0.0f;
         chPtr[c][i] = y;
     }
@@ -1282,6 +1476,8 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
         guardHpState2      = { 0.0, 0.0 };
         guardTotE          = { 0.0, 0.0 };
         guardHiE           = { 0.0, 0.0 };
+        lowShelfZ1         = { 0.0, 0.0 };
+        lowShelfZ1         = { 0.0, 0.0 };
         lastAppliedAttnDb  = { 0.0, 0.0 };
     }
 
@@ -1345,6 +1541,10 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
     const float link01Target    = apvts->getRawParameterValue ("stereo_link")->load();
     const int   osMinIndex      = (int) apvts->getRawParameterValue ("oversampling_min")->load();
     juce::ignoreUnused (osMinIndex);
+
+    float trimDb = apvts->getRawParameterValue("trim")->load();
+    float trimLin = std::pow(10.0f, trimDb / 20.0f);
+    buffer.applyGain(trimLin);
 
     driveDbSmoothed.setTargetValue (driveDbTarget);
     ceilingDbSmoothed.setTargetValue (ceilingDbTarget);
@@ -1922,9 +2122,14 @@ void CompassMasteringLimiterAudioProcessor::selectOversamplingAtBoundary (int os
     {
         activeOversampler = os;
         const int osFactor = juce::jmax (1, (int) activeOversampler->getOversamplingFactor());
-        const double dt = lastInvSampleRate / (double) osFactor;
-        const double fs = (dt > 0.0 ? 1.0 / dt : 0.0);
-        const double w0 = 2.0 * juce::MathConstants<double>::pi * 8000.0 / juce::jmax (1.0, fs);
+        const double fsDet = lastSampleRate * (double) osFactor;
+
+        // Phase 1.7 Priority 4: dynamic guardrail HPF cutoff at detector rate
+        const double fsSafe = juce::jmax (1.0, fsDet);
+        const double kGuardFcHz = fsSafe / 5.5;
+
+        // Existing 2nd-order Butterworth HPF topology (same normalization), cutoff replaced with kGuardFcHz
+        const double w0 = 2.0 * juce::MathConstants<double>::pi * kGuardFcHz / fsSafe;
         const double cw = std::cos (w0);
         const double sw = std::sin (w0);
         constexpr double Q = 0.7071067811865476;
@@ -1940,6 +2145,20 @@ void CompassMasteringLimiterAudioProcessor::selectOversamplingAtBoundary (int os
         guardNb2 = b2 / a0;
         guardNa1 = a1 / a0;
         guardNa2 = a2 / a0;
+
+        // Phase 1.7 Priority 4: 1st-order low-shelf post-compensation (+3 dB @ 200 Hz), detector-rate bilinear prewarp
+        const double gainDb = 3.0;
+        const double fc = 200.0;
+        const double omega = 2.0 * fsSafe * std::tan (juce::MathConstants<double>::pi * fc / fsSafe);
+        const double A = std::pow (10.0, gainDb / 40.0);
+        const double b0s = (1.0 + A * omega) / (1.0 + omega);
+        const double b1s = (A * omega - 1.0) / (1.0 + omega);
+        const double a1s = (omega - 1.0) / (1.0 + omega);
+
+        lowShelfB0 = b0s;
+        lowShelfB1 = b1s;
+        lowShelfA1 = a1s;
+
         setLatencySamples (oversamplerLatencySamples[(size_t) idx]);
 
         // Deterministic, transport-safe boundary behavior:
@@ -2192,6 +2411,20 @@ public:
         return (float) juce::jlimit (-120.0f, 60.0f, v);
     }
 
+    bool getCurrentClampGlue01 (float& outClamp01, float& outGlue01) const noexcept
+    {
+        MeterSnapshot s{};
+        if (! readMeters (s))
+            return false;
+
+        const float c = juce::jmax (s.clamp01[0], s.clamp01[1]);
+        const float g = juce::jmax (s.glue01[0],  s.glue01[1]);
+
+        outClamp01 = juce::jlimit (0.0f, 1.0f, c);
+        outGlue01  = juce::jlimit (0.0f, 1.0f, g);
+        return true;
+    }
+
     // Phase 1.4 — deterministic probes (non-realtime; callable from tests/debug harness)
     double probeSettleTimeSec (double sampleRate) const noexcept;
     bool probeContinuityFastAutomation (double sampleRate, double& outMaxAbsDeltaDb) const noexcept;
@@ -2215,6 +2448,9 @@ private:
 
         double   crestPreDb    = 0.0;
         double   crestPostDb   = 0.0;
+
+        float   clamp01[2]     { 0.0f, 0.0f };
+        float   glue01[2]      { 1.0f, 1.0f };
 
         uint64_t frameCounter  = 0; // monotonic debug-only counter
     };
@@ -2291,6 +2527,21 @@ private:
 
     // Phase D: promoted helpers (no allocations, no virtual dispatch)
     static double onePoleAlpha (double tauSec, double dtSec) noexcept;
+
+    // Phase 1.x — Hot-path exp/log acceleration (tables precomputed in prepareToPlay; no lazy init)
+    static constexpr int    kExpTableSize = 8192;
+    static constexpr double kExpMaxX      = 0.1;   // x = dt/tau domain clamp
+
+    static constexpr int    kLogTableSize = 4096;
+    static constexpr double kLogMin       = -12.0; // log10(y) min
+    static constexpr double kLogRange     = 18.0;  // [-12, +6]
+
+    std::array<double, (size_t) kExpTableSize> expNegTable {};
+    std::array<double, (size_t) kLogTableSize> log10Table  {};
+
+    double expLookup (double x) const noexcept;     // returns exp(-x) using expNegTable
+    double log10Lookup (double y) const noexcept;   // returns log10(y) using log10Table (indexing may use std::log10)
+
     void processOneSample (float* const* chPtr,
                           int numCh,
                           int i,
@@ -2467,6 +2718,10 @@ private:
     std::array<double, 2> guardHiE     { 0.0, 0.0 }; // high-band energy EMA
     double guardNb0 = 0.0, guardNb1 = 0.0, guardNb2 = 0.0, guardNa1 = 0.0, guardNa2 = 0.0;
 
+    // Guardrail measurement compensation (Phase 1.7 Priority 4): 1st-order low-shelf (+3 dB @ 200 Hz), measurement path only
+    double lowShelfB0 = 1.0, lowShelfB1 = 0.0, lowShelfA1 = 0.0; // identity defaults until boundary compute
+    std::array<double, 2> lowShelfZ1 { 0.0, 0.0 };
+
     // GR average (Phase 1.7 activation): 50 ms one-pole EMA of grAbsDb (global, not per-channel)
     double guardGrAvgDb = 0.0;
 
@@ -2477,3 +2732,6 @@ private:
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompassMasteringLimiterAudioProcessor)
 };
+
+
+===== FILE BUNDLE END =====

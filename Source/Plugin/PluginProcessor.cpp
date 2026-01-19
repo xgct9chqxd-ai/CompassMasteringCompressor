@@ -71,6 +71,17 @@ CompassMasteringLimiterAudioProcessor::createParameterLayout()
         }
     ));
 
+layout.add(std::make_unique<juce::AudioParameterFloat>(
+    juce::ParameterID{"trim", 1},
+    "Trim",
+    juce::NormalisableRange<float>{-20.0f, 20.0f, 0.01f},
+    0.0f,
+    juce::String(),
+    juce::AudioProcessorParameter::genericParameter,
+    [](float v, int) { return juce::String(v, 1) + " dB"; },
+    [](const juce::String& s) { return s.getFloatValue(); }
+));
+
     layout.add (std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID { "stereo_link", 1 },
         "Stereo Link",
@@ -857,6 +868,7 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
     lastOutScalar[1] = gR;
 
     constexpr float kEpsAbs = 1.0e-12f;
+    constexpr float kSoftClipK = 0.02f;
     float ceilingLin = (float) std::pow (10.0, ceilingDb / 20.0);
     if (! std::isfinite ((double) ceilingLin) || ceilingLin <= 0.0f)
         ceilingLin = 0.0f;
@@ -866,18 +878,15 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
         float x = chPtr[0][i];
         if (! std::isfinite ((double) x)) x = 0.0f;
 
-        const float a = std::abs (x);
-        const float gCeil = (a > kEpsAbs ? (ceilingLin / a) : 1.0e12f);
-        float gApplied = (gL < gCeil ? gL : gCeil);
+        float y = x * gL;
 
-        if (a > kEpsAbs && ceilingLin > 0.0f)
+        if (ceilingLin > 0.0f)
         {
-            const float overshootDb = 20.0f * std::log10 (a / ceilingLin);
-            if (overshootDb > 0.1f)
-                gApplied = gCeil;
+            const float u = y / ceilingLin;
+            if (std::abs (u) > 1.0f)
+                y = ceilingLin * std::tanh (u * kSoftClipK) / kSoftClipK;
         }
 
-        float y = x * gApplied;
         if (! std::isfinite ((double) y)) y = 0.0f;
         chPtr[0][i] = y;
     }
@@ -887,18 +896,15 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
         float x = chPtr[1][i];
         if (! std::isfinite ((double) x)) x = 0.0f;
 
-        const float a = std::abs (x);
-        const float gCeil = (a > kEpsAbs ? (ceilingLin / a) : 1.0e12f);
-        float gApplied = (gR < gCeil ? gR : gCeil);
+        float y = x * gR;
 
-        if (a > kEpsAbs && ceilingLin > 0.0f)
+        if (ceilingLin > 0.0f)
         {
-            const float overshootDb = 20.0f * std::log10 (a / ceilingLin);
-            if (overshootDb > 0.1f)
-                gApplied = gCeil;
+            const float u = y / ceilingLin;
+            if (std::abs (u) > 1.0f)
+                y = ceilingLin * std::tanh (u * kSoftClipK) / kSoftClipK;
         }
 
-        float y = x * gApplied;
         if (! std::isfinite ((double) y)) y = 0.0f;
         chPtr[1][i] = y;
     }
@@ -908,18 +914,15 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
         float x = chPtr[c][i];
         if (! std::isfinite ((double) x)) x = 0.0f;
 
-        const float a = std::abs (x);
-        const float gCeil = (a > kEpsAbs ? (ceilingLin / a) : 1.0e12f);
-        float gApplied = (gR < gCeil ? gR : gCeil);
+        float y = x * gR;
 
-        if (a > kEpsAbs && ceilingLin > 0.0f)
+        if (ceilingLin > 0.0f)
         {
-            const float overshootDb = 20.0f * std::log10 (a / ceilingLin);
-            if (overshootDb > 0.1f)
-                gApplied = gCeil;
+            const float u = y / ceilingLin;
+            if (std::abs (u) > 1.0f)
+                y = ceilingLin * std::tanh (u * kSoftClipK) / kSoftClipK;
         }
 
-        float y = x * gApplied;
         if (! std::isfinite ((double) y)) y = 0.0f;
         chPtr[c][i] = y;
     }
@@ -1093,6 +1096,10 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
     const float link01Target    = apvts->getRawParameterValue ("stereo_link")->load();
     const int   osMinIndex      = (int) apvts->getRawParameterValue ("oversampling_min")->load();
     juce::ignoreUnused (osMinIndex);
+
+    float trimDb = apvts->getRawParameterValue("trim")->load();
+    float trimLin = std::pow(10.0f, trimDb / 20.0f);
+    buffer.applyGain(trimLin);
 
     driveDbSmoothed.setTargetValue (driveDbTarget);
     ceilingDbSmoothed.setTargetValue (ceilingDbTarget);
