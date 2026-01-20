@@ -903,7 +903,8 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
     lastOutScalar[1] = gR;
 
     constexpr float kEpsAbs = 1.0e-12f;
-    constexpr float kSoftClipK = 1.5f;
+    constexpr float kSoftClipK = 1.25f;
+    constexpr float kCeilingKnee = 0.035f;
     float ceilingLin = (float) std::pow (10.0, ceilingDb / 20.0);
     if (! std::isfinite ((double) ceilingLin) || ceilingLin <= 0.0f)
         ceilingLin = 0.0f;
@@ -964,26 +965,26 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
             // Post-ceiling softclip + hard margin (per-channel), unchanged behavior
             {
                 const float u = yL / ceilingLin;
-                if (std::abs (u) > 1.0f)
-                    yL = ceilingLin * std::tanh (u * kSoftClipK);
+                const float a = std::abs (u);
 
-                constexpr float kHardMargin = 1.005f;
-                const float hardLim = ceilingLin * kHardMargin;
-                const float ay = std::abs (yL);
-                if (ay > hardLim && ay > 0.0f)
-                    yL = (yL / ay) * hardLim;
+                float w = (a - 1.0f) / kCeilingKnee;
+                w = juce::jlimit (0.0f, 1.0f, w);
+                w = w * w * (3.0f - 2.0f * w); // smoothstep
+
+                const float ySat = ceilingLin * std::tanh (u * kSoftClipK);
+                yL = yL + w * (ySat - yL);
             }
 
             {
                 const float u = yR / ceilingLin;
-                if (std::abs (u) > 1.0f)
-                    yR = ceilingLin * std::tanh (u * kSoftClipK);
+                const float a = std::abs (u);
 
-                constexpr float kHardMargin = 1.005f;
-                const float hardLim = ceilingLin * kHardMargin;
-                const float ay = std::abs (yR);
-                if (ay > hardLim && ay > 0.0f)
-                    yR = (yR / ay) * hardLim;
+                float w = (a - 1.0f) / kCeilingKnee;
+                w = juce::jlimit (0.0f, 1.0f, w);
+                w = w * w * (3.0f - 2.0f * w); // smoothstep
+
+                const float ySat = ceilingLin * std::tanh (u * kSoftClipK);
+                yR = yR + w * (ySat - yR);
             }
         }
 
@@ -1010,14 +1011,15 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
             y *= gCeil;
 
             const float u = y / ceilingLin;
-            if (std::abs (u) > 1.0f)
-                y = ceilingLin * std::tanh (u * kSoftClipK);
+            const float aU = std::abs (u);
 
-            constexpr float kHardMargin = 1.005f;
-            const float hardLim = ceilingLin * kHardMargin;
-            const float ay = std::abs (y);
-            if (ay > hardLim && ay > 0.0f)
-                y = (y / ay) * hardLim;
+            float w = (aU - 1.0f) / kCeilingKnee;
+            w = juce::jlimit (0.0f, 1.0f, w);
+            w = w * w * (3.0f - 2.0f * w); // smoothstep
+
+            const float ySat = ceilingLin * std::tanh (u * kSoftClipK);
+            y = y + w * (ySat - y);
+
         }
 
         if (! std::isfinite ((double) y)) y = 0.0f;
@@ -1042,14 +1044,15 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
             y *= gCeil;
 
             const float u = y / ceilingLin;
-            if (std::abs (u) > 1.0f)
-                y = ceilingLin * std::tanh (u * kSoftClipK);
+            const float aU = std::abs (u);
 
-            constexpr float kHardMargin = 1.005f;
-            const float hardLim = ceilingLin * kHardMargin;
-            const float ay = std::abs (y);
-            if (ay > hardLim && ay > 0.0f)
-                y = (y / ay) * hardLim;
+            float w = (aU - 1.0f) / kCeilingKnee;
+            w = juce::jlimit (0.0f, 1.0f, w);
+            w = w * w * (3.0f - 2.0f * w); // smoothstep
+
+            const float ySat = ceilingLin * std::tanh (u * kSoftClipK);
+            y = y + w * (ySat - y);
+
         }
 
         if (! std::isfinite ((double) y)) y = 0.0f;
