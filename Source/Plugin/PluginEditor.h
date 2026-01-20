@@ -41,26 +41,40 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        auto r = getLocalBounds().toFloat().reduced (6.0f);
+        //// [CML:UI] GR meter LEDs — deterministic block strip
+        constexpr float kInsetPx       = 14.0f;
+        constexpr int   kBlocks        = 60;
+        constexpr float kGapPx         = 1.0f;
+        constexpr float kBlockHeightFr = 0.55f;
+        constexpr float kRangeDb       = 24.0f;
+        constexpr float kLitAlpha      = 0.22f;
+        constexpr float kUnlitAlpha    = 0.55f;
+        constexpr float kTopStrokeA    = 0.08f;
+        constexpr float kTopStrokePx   = 1.0f;
 
-        // Background
-        g.setColour (juce::Colours::white.withAlpha (0.10f));
-        g.fillRoundedRectangle (r, 8.0f);
+        auto r = getLocalBounds().toFloat();
+        auto ledArea = r.reduced (kInsetPx, kInsetPx);
 
-        // Filled bar (left -> right as GR increases)
-        constexpr float kRangeDb = 24.0f;
-        const float fill01 = juce::jlimit (0.0f, 1.0f, lastGrDb / kRangeDb);
-        auto fillR = r;
-        fillR.setWidth (r.getWidth() * fill01);
+        const float bw = (ledArea.getWidth() - kGapPx * (float) (kBlocks - 1)) / (float) kBlocks;
+        const float bh = ledArea.getHeight() * kBlockHeightFr;
+        const float y  = ledArea.getCentreY() - 0.5f * bh;
 
-        g.setColour (juce::Colours::white.withAlpha (0.60f));
-        g.fillRoundedRectangle (fillR, 8.0f);
+        const float grNorm = juce::jlimit (0.0f, 1.0f, lastGrDb / kRangeDb);
+        const int lit = (int) std::floor (grNorm * (float) kBlocks + 0.5f);
 
-        // Label "GR"
-        auto labelR = r.reduced (10.0f, 6.0f);
-        g.setColour (juce::Colours::white.withAlpha (0.70f));
-        g.setFont (12.5f);
-        g.drawText ("GR", labelR.removeFromLeft (34.0f), juce::Justification::centredLeft, false);
+        for (int i = 0; i < kBlocks; ++i)
+        {
+            const float x = ledArea.getX() + (float) i * (bw + kGapPx);
+            juce::Rectangle<float> b (x, y, bw, bh);
+
+            if (i < lit) g.setColour (juce::Colours::white.withAlpha (kLitAlpha));
+            else         g.setColour (juce::Colours::black.withAlpha (kUnlitAlpha));
+
+            g.fillRect (b);
+
+            g.setColour (juce::Colours::white.withAlpha (kTopStrokeA));
+            g.drawLine (b.getX(), b.getY(), b.getRight(), b.getY(), kTopStrokePx);
+        }
     }
 
 private:
@@ -180,6 +194,11 @@ private:
     juce::ComboBox oversamplingMin;
 
     GRHistoryMeter grMeter;
+    juce::Label grTitleLabel;
+    juce::Rectangle<int> grFullBounds;
+    juce::Rectangle<int> grWellBounds;
+    juce::Rectangle<int> grModuleBounds;
+    float lastGrDb = 0.0f;
     VerticalPeakMeter inTpMeter, outTpMeter;
     HorizontalClampGlueMeter clampMeter, glueMeter;
     juce::Label currentGrLabel;

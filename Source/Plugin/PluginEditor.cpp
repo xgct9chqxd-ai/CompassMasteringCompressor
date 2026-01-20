@@ -376,14 +376,29 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
     addAndMakeVisible (grMeter);
     grMeter.setInterceptsMouseClicks (false, false);
     grMeter.toBack();
+    grMeter.setAlpha (0.0f);
+    grMeter.setEnabled (false);
 
-    currentGrLabel.setJustificationType (juce::Justification::centredRight);
-    currentGrLabel.setFont (juce::Font (14.0f));
-    currentGrLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
+    //// [CML:UI] GR title label — display-only header
+    grTitleLabel.setText ("GR", juce::dontSendNotification);
+    grTitleLabel.setJustificationType (juce::Justification::centred);
+    grTitleLabel.setFont (juce::Font (34.0f, juce::Font::bold));
+    grTitleLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.88f));
+    grTitleLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    grTitleLabel.setInterceptsMouseClicks (false, false);
+    addAndMakeVisible (grTitleLabel);
+
+    currentGrLabel.setJustificationType (juce::Justification::centred);
+    currentGrLabel.setFont (juce::Font (22.0f, juce::Font::bold));
+    currentGrLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.88f));
     currentGrLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
     currentGrLabel.setInterceptsMouseClicks (false, false);
     currentGrLabel.setText ("0.0 dB", juce::dontSendNotification);
     addAndMakeVisible (currentGrLabel);
+
+    //// [CML:UI] GR hidden components — paint-owned render
+    currentGrLabel.setVisible (false);
+    grTitleLabel.setVisible (false);
 
     inTpLabel.setJustificationType (juce::Justification::centredLeft);
     inTpLabel.setFont (juce::Font (13.0f));
@@ -500,6 +515,7 @@ CompassMasteringLimiterAudioProcessorEditor::~CompassMasteringLimiterAudioProces
 void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
 {
     const float current = processor.getCurrentGRDb();
+    lastGrDb = current;
 
     grMeter.pushValueDb (current);
     currentGrLabel.setText (juce::String::formatted ("%.1f dB", current), juce::dontSendNotification);
@@ -546,7 +562,7 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
         outPk = juce::jmax (-120.0f, outPk);
     }
 
-    grMeter.repaint();
+    repaint (grFullBounds);
 }
 
 void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
@@ -557,6 +573,143 @@ void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
     g.setColour (juce::Colours::white.withAlpha (0.85f));
     g.setFont (14.0f);
     g.drawText ("Compass Mastering Limiter", 16, 10, getWidth() - 32, 20, juce::Justification::left);
+
+    //// [CML:UI] GR module framing — recessed plate + well
+    {
+        // Compute geometry (all derived from stored rectangles; no magic outside this block)
+        constexpr float kOuterInsetPx   = 8.0f;
+        constexpr float kCavityExpandPx = 14.0f;
+        constexpr float kTabWidthFrac   = 0.22f;
+        constexpr float kTabHeightPx    = 34.0f;
+        constexpr float kTabRiseFrac    = 0.65f;
+
+        auto outer  = grFullBounds.toFloat().reduced (kOuterInsetPx);
+        auto cavity = grWellBounds.toFloat().expanded (kCavityExpandPx, kCavityExpandPx);
+        auto well   = grWellBounds.toFloat();
+
+        // Define a header tab centered above the well (reference-style)
+        const float tabW = well.getWidth() * kTabWidthFrac;
+        const float tabH = kTabHeightPx;
+        auto tab = juce::Rectangle<float> (
+            well.getCentreX() - 0.5f * tabW,
+            well.getY() - (tabH * kTabRiseFrac),
+            tabW,
+            tabH
+        );
+
+        // 1) Outer module plate (vertical gradient + stroke)
+        {
+            juce::ColourGradient plate (juce::Colours::white.withAlpha (0.08f),
+                                        outer.getCentreX(), outer.getY(),
+                                        juce::Colours::black.withAlpha (0.45f),
+                                        outer.getCentreX(), outer.getBottom(),
+                                        false);
+            g.setGradientFill (plate);
+            g.fillRoundedRectangle (outer, 10.0f);
+
+            g.setColour (juce::Colours::white.withAlpha (0.08f));
+            g.drawRoundedRectangle (outer, 10.0f, 1.0f);
+        }
+
+        // 2) Inner cavity bezel (darker gradient + bevel strokes)
+        {
+            juce::ColourGradient cav (juce::Colours::black.withAlpha (0.55f),
+                                      cavity.getCentreX(), cavity.getY(),
+                                      juce::Colours::black.withAlpha (0.80f),
+                                      cavity.getCentreX(), cavity.getBottom(),
+                                      false);
+            g.setGradientFill (cav);
+            g.fillRoundedRectangle (cavity, 9.0f);
+
+            g.setColour (juce::Colours::white.withAlpha (0.06f));
+            g.drawRoundedRectangle (cavity, 9.0f, 1.0f);
+
+            // Bevel illusion: top/left highlight + bottom/right shadow
+            auto c = cavity.reduced (0.5f, 0.5f);
+            const float x1 = c.getX();
+            const float y1 = c.getY();
+            const float x2 = c.getRight();
+            const float y2 = c.getBottom();
+
+            g.setColour (juce::Colours::white.withAlpha (0.08f));
+            g.drawLine (x1, y1, x2, y1, 1.0f);
+            g.drawLine (x1, y1, x1, y2, 1.0f);
+
+            g.setColour (juce::Colours::black.withAlpha (0.40f));
+            g.drawLine (x1, y2, x2, y2, 1.0f);
+            g.drawLine (x2, y1, x2, y2, 1.0f);
+        }
+
+        // 3) Inner well floor (near-black gradient + lip strokes)
+        {
+            juce::ColourGradient wf (juce::Colours::black.withAlpha (0.55f),
+                                     well.getCentreX(), well.getY(),
+                                     juce::Colours::black.withAlpha (0.85f),
+                                     well.getCentreX(), well.getBottom(),
+                                     false);
+            g.setGradientFill (wf);
+            g.fillRoundedRectangle (well, 8.0f);
+
+            g.setColour (juce::Colours::white.withAlpha (0.07f));
+            g.drawRoundedRectangle (well, 8.0f, 1.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.45f));
+            g.drawRoundedRectangle (well.reduced (1.0f, 1.0f), 7.0f, 1.0f);
+        }
+
+        // 4) Glass overlay (clip to well, top highlight)
+        {
+            juce::Graphics::ScopedSaveState ss (g);
+            g.reduceClipRegion (well.toNearestInt());
+
+            auto glass = well.reduced (2.0f, 2.0f);
+            glass.setHeight (glass.getHeight() * 0.55f);
+
+            juce::ColourGradient grad (juce::Colours::white.withAlpha (0.10f),
+                                       glass.getCentreX(), glass.getY(),
+                                       juce::Colours::white.withAlpha (0.0f),
+                                       glass.getCentreX(), glass.getBottom(),
+                                       false);
+            g.setGradientFill (grad);
+            g.fillRoundedRectangle (glass, 7.0f);
+        }
+
+        //// [CML:UI] GR header tab — reference-style badge
+        {
+            constexpr float kTabCornerPx   = 8.0f;
+            constexpr float kTabStrokePx   = 1.0f;
+            constexpr float kTitleFontPx   = 22.0f;
+            constexpr float kValueFontPx   = 16.0f;
+            constexpr float kTitleAlpha    = 0.90f;
+            constexpr float kValueAlpha    = 0.85f;
+
+            const float grMagDb = juce::jmax (0.0f, lastGrDb);
+
+            juce::ColourGradient tabGrad (juce::Colours::white.withAlpha (0.09f),
+                                          tab.getCentreX(), tab.getY(),
+                                          juce::Colours::black.withAlpha (0.55f),
+                                          tab.getCentreX(), tab.getBottom(),
+                                          false);
+            g.setGradientFill (tabGrad);
+            g.fillRoundedRectangle (tab, kTabCornerPx);
+
+            g.setColour (juce::Colours::white.withAlpha (0.08f));
+            g.drawRoundedRectangle (tab, kTabCornerPx, kTabStrokePx);
+
+            auto tabTop  = tab.withHeight (tab.getHeight() * 0.5f);
+            auto tabBot  = tab.withTrimmedTop (tab.getHeight() * 0.5f);
+
+            g.setColour (juce::Colours::white.withAlpha (kTitleAlpha));
+            g.setFont (juce::Font (kTitleFontPx, juce::Font::bold));
+            g.drawText ("GR", tabTop.toNearestInt(), juce::Justification::centred, false);
+
+            g.setColour (juce::Colours::white.withAlpha (kValueAlpha));
+            g.setFont (juce::Font (kValueFontPx, juce::Font::bold));
+            g.drawText (juce::String::formatted ("%.1f dB", grMagDb),
+                        tabBot.toNearestInt(),
+                        juce::Justification::centred,
+                        false);
+        }
+    }
 
     // Static labels (constitution: labeling for all visible controls)
     auto drawLabelAbove = [&] (const juce::Component& c, const juce::String& label)
@@ -623,6 +776,7 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
     mainZone.removeFromTop (Layout::interBandGap);
 
     auto bandGR = mainZone.removeFromTop (Layout::grMainZone);
+    grFullBounds = bandGR;  // store BEFORE modifying bandGR
     mainZone.removeFromTop (Layout::interBandGap);
 
     auto bandMiniBars = mainZone.removeFromTop (Layout::clampGlueBars);
@@ -689,8 +843,23 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
     grHeader.removeFromLeft (behaviorGap);
     stereoLink.setBounds (grHeader.withTrimmedTop (behaviorTrimTop).withHeight (behaviorH));
 
-    grMeter.setBounds (grBarArea.withTrimmedLeft (grTrimLR).withTrimmedRight (grTrimLR));
-    currentGrLabel.setBounds (grBarArea.withSizeKeepingCentre (grLabelW, grLabelH).translated (0, grLabelDY));
+    const int wellPadX = 18;
+    const int wellH    = 74;
+    auto well = grFullBounds.withTrimmedTop (48)
+                           .withTrimmedBottom (6)
+                           .reduced (wellPadX, 0)
+                           .withHeight (wellH)
+                           .withY (grFullBounds.getY() + 58);
+    grWellBounds = well;
+
+    auto meterInner = well.reduced (18, 16);
+    grMeter.setBounds (meterInner);
+
+    auto titleArea = well.withTrimmedTop (6).removeFromTop (34);
+    grTitleLabel.setBounds (titleArea);
+
+    auto valueArea = well.withTrimmedBottom (8).removeFromBottom (28);
+    currentGrLabel.setBounds (valueArea);
 
     // Clamp & Glue mini bars
     clampMeter.setBounds (bandMiniBars.removeFromLeft (bandMiniBars.getWidth() / 2 - clampGlueGap));
