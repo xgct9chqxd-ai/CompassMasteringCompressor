@@ -971,7 +971,7 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
                 w = juce::jlimit (0.0f, 1.0f, w);
                 w = w * w * (3.0f - 2.0f * w); // smoothstep
 
-                const float ySat = ceilingLin * std::tanh (u * kSoftClipK);
+                const float ySat = ceilingLin * (u >= 0.0f ? 1.0f : -1.0f);
                 yL = yL + w * (ySat - yL);
             }
 
@@ -983,7 +983,7 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
                 w = juce::jlimit (0.0f, 1.0f, w);
                 w = w * w * (3.0f - 2.0f * w); // smoothstep
 
-                const float ySat = ceilingLin * std::tanh (u * kSoftClipK);
+                const float ySat = ceilingLin * (u >= 0.0f ? 1.0f : -1.0f);
                 yR = yR + w * (ySat - yR);
             }
         }
@@ -1017,7 +1017,7 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
             w = juce::jlimit (0.0f, 1.0f, w);
             w = w * w * (3.0f - 2.0f * w); // smoothstep
 
-            const float ySat = ceilingLin * std::tanh (u * kSoftClipK);
+            const float ySat = ceilingLin * (u >= 0.0f ? 1.0f : -1.0f);
             y = y + w * (ySat - y);
 
         }
@@ -1050,7 +1050,7 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
             w = juce::jlimit (0.0f, 1.0f, w);
             w = w * w * (3.0f - 2.0f * w); // smoothstep
 
-            const float ySat = ceilingLin * std::tanh (u * kSoftClipK);
+            const float ySat = ceilingLin * (u >= 0.0f ? 1.0f : -1.0f);
             y = y + w * (ySat - y);
 
         }
