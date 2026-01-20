@@ -363,6 +363,7 @@ private:
 
     // Step 1.1 — Per-channel ceiling envelope state (2-channel accumulator contract)
     float ceilingGainState[2] = { 1.0f, 1.0f };
+    float ceilingGainStateLinked = 1.0f;
 
     // Step 1.2 — Ceiling envelope coefficients (1-pole smoothing)
     float ceilA_down = 0.0f;  // gain decreasing

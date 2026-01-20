@@ -206,6 +206,7 @@ void CompassMasteringLimiterAudioProcessor::reset (double sampleRate, int maxBlo
     // Ceiling envelope (state + coeffs) — computed here (SR-dependent), never in processBlock.
     for (int c = 0; c < 2; ++c)
         ceilingGainState[c] = 1.0f;
+    ceilingGainStateLinked = 1.0f;
 
     {
         // Step 3.1 — Envelope SR domain: must match the loop where ceiling is enforced.
@@ -907,7 +908,91 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
     if (! std::isfinite ((double) ceilingLin) || ceilingLin <= 0.0f)
         ceilingLin = 0.0f;
 
-    if (numCh >= 1)
+    if (numCh >= 2)
+    {
+        float xL = chPtr[0][i];
+        float xR = chPtr[1][i];
+        if (! std::isfinite ((double) xL)) xL = 0.0f;
+        if (! std::isfinite ((double) xR)) xR = 0.0f;
+
+        float yL = xL * gL;
+        float yR = xR * gR;
+
+        if (ceilingLin > 0.0f)
+        {
+            const bool stereoLinked = (link01Smooth >= 0.5);
+
+            if (stereoLinked)
+            {
+                const float aL = std::abs (yL);
+                const float aR = std::abs (yR);
+                const float aMax = juce::jmax (aL, aR);
+
+                float gReqLinked = (aMax > kEpsAbs ? (ceilingLin / aMax) : 1.0f);
+                if (! std::isfinite ((double) gReqLinked)) gReqLinked = 1.0f;
+                gReqLinked = juce::jlimit (0.0f, 1.0f, gReqLinked);
+
+                const float gCeilLinked = stepCeilingEnv (gReqLinked, ceilingGainStateLinked, ceilA_down, ceilA_up);
+                yL *= gCeilLinked;
+                yR *= gCeilLinked;
+            }
+            else
+            {
+                // L (unlinked) — keep existing per-channel ceiling behavior
+                {
+                    const float a = std::abs (yL);
+                    float gReq = (a > kEpsAbs ? (ceilingLin / a) : 1.0f);
+                    if (! std::isfinite ((double) gReq)) gReq = 1.0f;
+                    gReq = juce::jlimit (0.0f, 1.0f, gReq);
+
+                    const float gCeil = stepCeilingEnv (gReq, ceilingGainState[0], ceilA_down, ceilA_up);
+                    yL *= gCeil;
+                }
+
+                // R (unlinked) — keep existing per-channel ceiling behavior
+                {
+                    const float a = std::abs (yR);
+                    float gReq = (a > kEpsAbs ? (ceilingLin / a) : 1.0f);
+                    if (! std::isfinite ((double) gReq)) gReq = 1.0f;
+                    gReq = juce::jlimit (0.0f, 1.0f, gReq);
+
+                    const float gCeil = stepCeilingEnv (gReq, ceilingGainState[1], ceilA_down, ceilA_up);
+                    yR *= gCeil;
+                }
+            }
+
+            // Post-ceiling softclip + hard margin (per-channel), unchanged behavior
+            {
+                const float u = yL / ceilingLin;
+                if (std::abs (u) > 1.0f)
+                    yL = ceilingLin * std::tanh (u * kSoftClipK);
+
+                constexpr float kHardMargin = 1.005f;
+                const float hardLim = ceilingLin * kHardMargin;
+                const float ay = std::abs (yL);
+                if (ay > hardLim && ay > 0.0f)
+                    yL = (yL / ay) * hardLim;
+            }
+
+            {
+                const float u = yR / ceilingLin;
+                if (std::abs (u) > 1.0f)
+                    yR = ceilingLin * std::tanh (u * kSoftClipK);
+
+                constexpr float kHardMargin = 1.005f;
+                const float hardLim = ceilingLin * kHardMargin;
+                const float ay = std::abs (yR);
+                if (ay > hardLim && ay > 0.0f)
+                    yR = (yR / ay) * hardLim;
+            }
+        }
+
+        if (! std::isfinite ((double) yL)) yL = 0.0f;
+        if (! std::isfinite ((double) yR)) yR = 0.0f;
+        chPtr[0][i] = yL;
+        chPtr[1][i] = yR;
+    }
+    else if (numCh >= 1)
     {
         float x = chPtr[0][i];
         if (! std::isfinite ((double) x)) x = 0.0f;
@@ -937,38 +1022,6 @@ void CompassMasteringLimiterAudioProcessor::processOneSample (float* const* chPt
 
         if (! std::isfinite ((double) y)) y = 0.0f;
         chPtr[0][i] = y;
-    }
-
-    if (numCh >= 2)
-    {
-        float x = chPtr[1][i];
-        if (! std::isfinite ((double) x)) x = 0.0f;
-
-        float y = x * gR;
-
-        if (ceilingLin > 0.0f)
-        {
-            const float a = std::abs (y);
-            float gReq = (a > kEpsAbs ? (ceilingLin / a) : 1.0f);
-            if (! std::isfinite ((double) gReq)) gReq = 1.0f;
-            gReq = juce::jlimit (0.0f, 1.0f, gReq);
-
-            const float gCeil = stepCeilingEnv (gReq, ceilingGainState[1], ceilA_down, ceilA_up);
-            y *= gCeil;
-
-            const float u = y / ceilingLin;
-            if (std::abs (u) > 1.0f)
-                y = ceilingLin * std::tanh (u * kSoftClipK);
-
-            constexpr float kHardMargin = 1.005f;
-            const float hardLim = ceilingLin * kHardMargin;
-            const float ay = std::abs (y);
-            if (ay > hardLim && ay > 0.0f)
-                y = (y / ay) * hardLim;
-        }
-
-        if (! std::isfinite ((double) y)) y = 0.0f;
-        chPtr[1][i] = y;
     }
 
     for (int c = 2; c < numCh; ++c)
@@ -1134,6 +1187,7 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
 
                 ceilingGainState[0] = 1.0f;
                 ceilingGainState[1] = 1.0f;
+                ceilingGainStateLinked = 1.0f;
 
                 // Transport-safe boundary: latch oversampling selection (no allocations here).
                 const int osMinIndexBoundary = (int) apvts->getRawParameterValue ("oversampling_min")->load();
@@ -1153,6 +1207,7 @@ void CompassMasteringLimiterAudioProcessor::processBlock (juce::AudioBuffer<floa
 
         ceilingGainState[0] = 1.0f;
         ceilingGainState[1] = 1.0f;
+        ceilingGainStateLinked = 1.0f;
 
         const int osMinIndexBoundary = (int) apvts->getRawParameterValue ("oversampling_min")->load();
         selectOversamplingAtBoundary (osMinIndexBoundary);
