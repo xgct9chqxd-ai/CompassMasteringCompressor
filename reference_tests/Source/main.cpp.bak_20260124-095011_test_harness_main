@@ -1,0 +1,139 @@
+#include <iostream>
+#include <vector>
+#include <cmath>
+#include <cstdint>
+#include <limits>
+
+#include "PluginProcessor.h"
+
+//// [CML:TEST] Minimal Test Result Helpers
+static int fail(const char* msg)
+{
+    std::cout << "reference_tests FAIL: " << msg << "\n";
+    return 1;
+}
+
+static bool isFiniteFloat(float x)
+{
+    return std::isfinite((double) x);
+}
+
+//// [CML:TEST] Buffer Utilities
+static float maxAbsInBuffer(const juce::AudioBuffer<float>& b)
+{
+    float m = 0.0f;
+    const int ch = b.getNumChannels();
+    const int n  = b.getNumSamples();
+    for (int c = 0; c < ch; ++c)
+    {
+        const float* p = b.getReadPointer(c);
+        for (int i = 0; i < n; ++i)
+            m = juce::jmax(m, std::abs(p[i]));
+    }
+    return m;
+}
+
+static bool allFinite(const juce::AudioBuffer<float>& b)
+{
+    const int ch = b.getNumChannels();
+    const int n  = b.getNumSamples();
+    for (int c = 0; c < ch; ++c)
+    {
+        const float* p = b.getReadPointer(c);
+        for (int i = 0; i < n; ++i)
+            if (! isFiniteFloat(p[i]))
+                return false;
+    }
+    return true;
+}
+
+//// [CML:TEST] Deterministic Stimulus Generators
+static void fillSine(juce::AudioBuffer<float>& b, double sampleRate, double freqHz, float ampLin)
+{
+    const int ch = b.getNumChannels();
+    const int n  = b.getNumSamples();
+    double ph = 0.0;
+    const double w = 2.0 * 3.14159265358979323846 * freqHz / sampleRate;
+    for (int i = 0; i < n; ++i)
+    {
+        const float v = (float) (std::sin(ph) * (double) ampLin);
+        for (int c = 0; c < ch; ++c)
+            b.setSample(c, i, v);
+        ph += w;
+        if (ph > 2.0 * 3.14159265358979323846) ph -= 2.0 * 3.14159265358979323846;
+    }
+}
+
+static void fillSilence(juce::AudioBuffer<float>& b)
+{
+    b.clear();
+}
+
+//// [CML:TEST] Core Harness Run
+static bool runOne(CompassMasteringLimiterAudioProcessor& proc, double sampleRate, int blockSize)
+{
+    constexpr int kNumInCh  = 2;
+    constexpr int kNumOutCh = 2;
+
+    proc.setPlayConfigDetails(kNumInCh, kNumOutCh, sampleRate, blockSize);
+    proc.prepareToPlay(sampleRate, blockSize);
+
+    juce::AudioBuffer<float> buf(kNumOutCh, blockSize);
+    juce::MidiBuffer midi;
+
+    constexpr float  kAmpLinHot         = 0.95f;
+    constexpr double kToneHz            = 1000.0;
+    constexpr int    kHotBlocks         = 200;
+    constexpr int    kSilenceBlocks     = 200;
+    constexpr float  kCeilingMarginLin  = 1.02f;
+
+    const float ceilingDb = proc.getCurrentCeilingDbTP();
+    const float ceilingLin = (float) std::pow(10.0, (double) ceilingDb / 20.0);
+
+    for (int n = 0; n < kHotBlocks; ++n)
+    {
+        fillSine(buf, sampleRate, kToneHz, kAmpLinHot);
+        proc.processBlock(buf, midi);
+        if (! allFinite(buf))
+            return false;
+
+        const float peak = maxAbsInBuffer(buf);
+        if (ceilingLin > 0.0f && peak > ceilingLin * kCeilingMarginLin)
+            return false;
+    }
+
+    for (int n = 0; n < kSilenceBlocks; ++n)
+    {
+        fillSilence(buf);
+        proc.processBlock(buf, midi);
+        if (! allFinite(buf))
+            return false;
+    }
+
+    proc.releaseResources();
+    return true;
+}
+
+int main()
+{
+    //// [CML:TEST] Sweep Definitions
+    constexpr double kSampleRatesHz[] = { 44100.0, 48000.0, 96000.0, 192000.0 };
+    constexpr int    kBlockSizes[]    = { 16, 32, 64, 128, 256, 512, 1024 };
+
+    //// [CML:TEST] Processor Construction
+    CompassMasteringLimiterAudioProcessor proc;
+
+    //// [CML:TEST] SR/Block Sweep
+    for (double sr : kSampleRatesHz)
+    {
+        for (int bs : kBlockSizes)
+        {
+            const bool ok = runOne(proc, sr, bs);
+            if (! ok)
+                return fail("sweep invariant failed (NaN/Inf or ceiling overshoot)");
+        }
+    }
+
+    std::cout << "reference_tests PASS\n";
+    return 0;
+}

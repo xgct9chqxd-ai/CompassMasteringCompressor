@@ -1,0 +1,9 @@
+PASS
+PLUGIN=./build_phase0/CompassMasteringLimiter_artefacts/VST3/Compass Mastering Limiter.vst3
+STRICTNESS=10
+REPEATS=5
+SAMPLE_RATES=44100,48000,96000
+BLOCK_SIZES=32,64,128,256,512,1024
+TIMEOUT_MS=20000
+RANDOM_SEED=
+LOG_DIR=pluginval_hard_logs/20260124-090356

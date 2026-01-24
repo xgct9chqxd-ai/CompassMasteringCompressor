@@ -8,7 +8,6 @@ target_include_directories(reference_tests PRIVATE
 
 target_link_libraries(reference_tests PRIVATE
     reference_core
-    CompassMasteringLimiter
     juce::juce_audio_processors
     juce::juce_audio_basics
     juce::juce_audio_utils
