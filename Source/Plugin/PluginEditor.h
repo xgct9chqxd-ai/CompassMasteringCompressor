@@ -41,8 +41,91 @@ public:
 
     void paint (juce::Graphics& g) override
     {
+        //// [CML:UI] GR meter recessed module — embedded frame
+        constexpr float kCornerPx         = 6.0f;
+        constexpr float kShadowRadiusPx   = 10.0f;
+        constexpr int   kShadowOffsetXPx  = 0;
+        constexpr int   kShadowOffsetYPx  = 2;
+        constexpr float kShadowAlpha      = 0.55f;
+        constexpr float kFrameStrokePx    = 1.0f;
+        constexpr float kFrameStrokeA     = 0.08f;
+        constexpr float kInnerStrokeA     = 0.40f;
+
+        auto r = getLocalBounds().toFloat();
+
+        // Soft ambient occlusion shadow (no glow)
+        {
+            const juce::DropShadow ds (juce::Colours::black.withAlpha (kShadowAlpha),
+                                       (int) std::round (kShadowRadiusPx),
+                                       { kShadowOffsetXPx, kShadowOffsetYPx });
+            ds.drawForRectangle (g, r.toNearestInt());
+        }
+
+        // Outer frame (slightly darker than parent well)
+        {
+            juce::ColourGradient frameGrad (juce::Colours::black.withAlpha (0.35f),
+                                            r.getCentreX(), r.getY(),
+                                            juce::Colours::black.withAlpha (0.70f),
+                                            r.getCentreX(), r.getBottom(),
+                                            false);
+            g.setGradientFill (frameGrad);
+            g.fillRoundedRectangle (r, kCornerPx);
+
+            g.setColour (juce::Colours::white.withAlpha (kFrameStrokeA));
+            g.drawRoundedRectangle (r, kCornerPx, kFrameStrokePx);
+
+            g.setColour (juce::Colours::black.withAlpha (kInnerStrokeA));
+            g.drawRoundedRectangle (r.reduced (1.0f, 1.0f), kCornerPx - 1.0f, kFrameStrokePx);
+        }
+
+        //// [CML:UI] GR meter inner cavity — concave recess
+        constexpr float kCavityInsetPx      = 2.5f;
+        constexpr float kCavityStrokeA      = 0.06f;
+        constexpr float kCavityInnerDarkA   = 0.55f;
+        constexpr float kCavityFillTopA     = 0.70f;
+        constexpr float kCavityFillBotA     = 0.88f;
+        constexpr float kInnerShadowHFrac   = 0.30f;
+        constexpr float kInnerShadowTopA    = 0.14f;
+        constexpr float kInnerShadowBotA    = 0.00f;
+
+        {
+            auto cavity = r.reduced (kCavityInsetPx, kCavityInsetPx);
+            const float cavityCornerPx = juce::jmax (0.0f, kCornerPx - kCavityInsetPx);
+
+            juce::ColourGradient cavGrad (juce::Colours::black.withAlpha (kCavityFillTopA),
+                                          cavity.getCentreX(), cavity.getY(),
+                                          juce::Colours::black.withAlpha (kCavityFillBotA),
+                                          cavity.getCentreX(), cavity.getBottom(),
+                                          false);
+            g.setGradientFill (cavGrad);
+            g.fillRoundedRectangle (cavity, cavityCornerPx);
+
+            // Subtle inner stroke to seat the LEDs into the recess
+            g.setColour (juce::Colours::white.withAlpha (kCavityStrokeA));
+            g.drawRoundedRectangle (cavity, cavityCornerPx, kFrameStrokePx);
+
+            // Very subtle top inner shadow band (concave illusion)
+            auto topBand = cavity;
+            topBand.setHeight (cavity.getHeight() * kInnerShadowHFrac);
+
+            juce::ColourGradient innerSh (juce::Colours::black.withAlpha (kInnerShadowTopA),
+                                          topBand.getCentreX(), topBand.getY(),
+                                          juce::Colours::black.withAlpha (kInnerShadowBotA),
+                                          topBand.getCentreX(), topBand.getBottom(),
+                                          false);
+            g.setGradientFill (innerSh);
+            g.fillRoundedRectangle (topBand, cavityCornerPx);
+
+            // Slight darkening stroke just inside cavity to increase depth without glow
+            g.setColour (juce::Colours::black.withAlpha (kCavityInnerDarkA));
+            g.drawRoundedRectangle (cavity.reduced (1.0f, 1.0f),
+                                    juce::jmax (0.0f, cavityCornerPx - 1.0f),
+                                    kFrameStrokePx);
+        }
+
         //// [CML:UI] GR meter LEDs — deterministic block strip
-        constexpr float kInsetPx       = 14.0f;
+        constexpr float kInsetXPx      = 18.0f;
+        constexpr float kInsetYPx      = 18.0f;
         constexpr int   kBlocks        = 60;
         constexpr float kGapPx         = 1.0f;
         constexpr float kBlockHeightFr = 0.55f;
@@ -52,8 +135,7 @@ public:
         constexpr float kTopStrokeA    = 0.08f;
         constexpr float kTopStrokePx   = 1.0f;
 
-        auto r = getLocalBounds().toFloat();
-        auto ledArea = r.reduced (kInsetPx, kInsetPx);
+        auto ledArea = r.reduced (kInsetXPx, kInsetYPx);
 
         const float bw = (ledArea.getWidth() - kGapPx * (float) (kBlocks - 1)) / (float) kBlocks;
         const float bh = ledArea.getHeight() * kBlockHeightFr;

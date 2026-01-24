@@ -156,15 +156,6 @@ int main()
     {
         proc.prepareToPlay (sr, bs);
 
-        const int latencySamples = proc.getLatencySamples();
-        const int graceBlocksFromLatency = (latencySamples > 0 ? (int) std::ceil ((double) latencySamples / (double) bs) : 0);
-
-        // Always allow a minimum grace time to flush any internal pipelines (even if host latency is 0).
-        constexpr double kTailGraceMinSec = 0.25;
-        const int graceBlocksMinTime = (int) std::ceil ((kTailGraceMinSec * sr) / (double) bs);
-
-        const int graceBlocks = std::max (graceBlocksFromLatency + 2, graceBlocksMinTime);
-
         setParamRaw (proc, "trim", 0.0f);
         setParamRaw (proc, "stereo_link", 1.0f);
 
@@ -220,10 +211,6 @@ int main()
             return false;
 
         const int tailBlocks = (int) std::ceil ((silenceTailSec * sr) / (double) bs);
-
-        constexpr double kTailLateWindowSec = 0.5; // enforce silence only at end of tail window
-        const int lateWindowBlocks = (int) std::max (1.0, std::ceil ((kTailLateWindowSec * sr) / (double) bs));
-        const int startMeasureK = std::max (0, tailBlocks - lateWindowBlocks);
         for (int i = 0; i < bs; ++i)
         {
             buf.setSample (0, i, 0.0f);
@@ -232,8 +219,6 @@ int main()
 
         double tailRmsMax = 0.0;
         double tailDcMax = 0.0;
-        double tailRmsMaxAfterGrace = 0.0;
-        double tailDcMaxAfterGrace  = 0.0;
 
         for (int k = 0; k < std::max (1, tailBlocks); ++k)
         {
@@ -241,105 +226,9 @@ int main()
             proc.processBlock (buf, midi);
             if (! bufferAllFinite (buf))
                 return false;
-if (! bufferAllFinite (buf))
-                return false;
-            const double blockRms = bufferRms (buf);
-            const double blockMeanAbs = std::abs (bufferMean (buf));
-            const double blockPeakLin = (double) bufferPeakAbs (buf);
 
-            if (! std::isfinite (blockRms) || ! std::isfinite (blockMeanAbs) || ! std::isfinite (blockPeakLin))
-            {
-                std::cout << "reference_tests DETAIL: non-finite tail stats"
-                          << " sr=" << (int) sr << " bs=" << bs
-                          << " stress=" << (stress ? 1 : 0)
-                          << " k=" << k << "/" << tailBlocks
-                          << " rmsLin=" << blockRms
-                          << " meanAbsLin=" << blockMeanAbs
-                          << " peakLin=" << blockPeakLin
-                          << "\n";
-                return false;
-            }
-
-            if (k >= graceBlocks && blockRms > silenceRmsMaxLin)
-
-            {
-
-                std::cout << "reference_tests DETAIL: tail RMS exceeds limit (early)"
-                          << " sr=" << (int) sr << " bs=" << bs
-                          << " stress=" << (stress ? 1 : 0)
-                          << " iters=" << itersPerCase
-                          << " k=" << k << "/" << tailBlocks
-                          << " rmsDb=" << linToDb (blockRms)
-                          << " limitDb=" << linToDb (silenceRmsMaxLin)
-                          << " rmsLin=" << blockRms
-                          << " limitLin=" << silenceRmsMaxLin
-                          << " peakDb=" << linToDb (blockPeakLin)
-                          << " peakLin=" << blockPeakLin
-                          << " meanAbsDb=" << linToDb (blockMeanAbs)
-                          << " meanAbsLin=" << blockMeanAbs
-                          << " s0[0..7]=";
-
-                const float* p0 = buf.getReadPointer (0);
-                const int nDump = std::min (8, buf.getNumSamples());
-                for (int i = 0; i < nDump; ++i)
-                    std::cout << (i ? "," : "") << p0[i];
-
-                std::cout << "\n";
-                return false;
-            }
-
-
-
-
-
-
-
-            const double blockMean = bufferMean (buf);
-
-
-
-
-            if (k >= startMeasureK)
-
-
-
-
-                tailRmsMax = std::max (tailRmsMax, blockRms);
-
-
-
-
-            if (k >= startMeasureK)
-
-
-
-
-                tailDcMax  = std::max (tailDcMax,  blockMeanAbs);
-
-
-
-
-            if (k >= graceBlocks)
-
-
-
-
-            {
-
-
-
-
-                tailRmsMaxAfterGrace = std::max (tailRmsMaxAfterGrace, blockRms);
-
-
-
-
-                tailDcMaxAfterGrace  = std::max (tailDcMaxAfterGrace,  blockMeanAbs);
-
-
-
-
-            }
+            tailRmsMax = std::max (tailRmsMax, bufferRms (buf));
+            tailDcMax  = std::max (tailDcMax, std::abs (bufferMean (buf)));
         }
 
         if (! std::isfinite (tailRmsMax) || ! std::isfinite (tailDcMax))
@@ -350,7 +239,7 @@ if (! bufferAllFinite (buf))
 
         if (tailRmsMax > silenceRmsMaxLin)
         {
-            std::cout << "reference_tests DETAIL: silence RMS too high" << " sr=" << (int) sr << " bs=" << bs << " stress=" << (stress ? 1 : 0) << " iters=" << itersPerCase << " tailBlocks=" << tailBlocks << " tailRmsDb=" << linToDb (tailRmsMax) << " limitDb=" << linToDb (silenceRmsMaxLin) << " tailRmsLin=" << tailRmsMax << " limitLin=" << silenceRmsMaxLin << " lateWindowBlocks=" << lateWindowBlocks << " startMeasureK=" << startMeasureK << "\n";
+            std::cout << "reference_tests DETAIL: silence RMS too high" << " sr=" << (int) sr << " bs=" << bs << " stress=" << (stress ? 1 : 0) << " iters=" << itersPerCase << " tailBlocks=" << tailBlocks << " tailRmsDb=" << linToDb (tailRmsMax) << " limitDb=" << linToDb (silenceRmsMaxLin) << " tailRmsLin=" << tailRmsMax << " limitLin=" << silenceRmsMaxLin << "\n";
             return false;
         }
 

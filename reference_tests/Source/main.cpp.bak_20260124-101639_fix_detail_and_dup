@@ -240,8 +240,8 @@ int main()
             buf.clear();
             proc.processBlock (buf, midi);
             if (! bufferAllFinite (buf))
-                return false;
-if (! bufferAllFinite (buf))
+                return false;proc.processBlock (buf, midi);
+            if (! bufferAllFinite (buf))
                 return false;
             const double blockRms = bufferRms (buf);
             const double blockMeanAbs = std::abs (bufferMean (buf));
@@ -350,7 +350,7 @@ if (! bufferAllFinite (buf))
 
         if (tailRmsMax > silenceRmsMaxLin)
         {
-            std::cout << "reference_tests DETAIL: silence RMS too high" << " sr=" << (int) sr << " bs=" << bs << " stress=" << (stress ? 1 : 0) << " iters=" << itersPerCase << " tailBlocks=" << tailBlocks << " tailRmsDb=" << linToDb (tailRmsMax) << " limitDb=" << linToDb (silenceRmsMaxLin) << " tailRmsLin=" << tailRmsMax << " limitLin=" << silenceRmsMaxLin << " lateWindowBlocks=" << lateWindowBlocks << " startMeasureK=" << startMeasureK << "\n";
+            std::cout << "reference_tests DETAIL: silence RMS too high" << " sr=" << (int) sr << " bs=" << bs << " stress=" << (stress ? 1 : 0) << " iters=" << itersPerCase << " tailBlocks=" << tailBlocks << " tailRmsDb=" << linToDb (tailRmsMax) << " limitDb=" << linToDb (silenceRmsMaxLin) << " tailRmsLin=" << tailRmsMax << " limitLin=" << silenceRmsMaxLin << "\n"; << " lateWindowBlocks=" << lateWindowBlocks << " startMeasureK=" << startMeasureK
             return false;
         }
 
