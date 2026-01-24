@@ -376,8 +376,8 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
     addAndMakeVisible (grMeter);
     grMeter.setInterceptsMouseClicks (false, false);
     grMeter.toBack();
-    grMeter.setAlpha (1.0f);
-    grMeter.setEnabled (true);
+    grMeter.setAlpha (0.0f);
+    grMeter.setEnabled (false);
 
     //// [CML:UI] GR title label — display-only header
     grTitleLabel.setText ("GR", juce::dontSendNotification);
@@ -483,9 +483,13 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
     initValueLabel (glueValueLabel);
     initValueLabel (ceilingValueLabel);
 
-    // Meters visibility
+    // Meters visibility + clamp/glue flags
     addAndMakeVisible (inTpMeter);
     addAndMakeVisible (outTpMeter);
+    addAndMakeVisible (clampMeter);
+    addAndMakeVisible (glueMeter);
+    clampMeter.setIsClamp (true);
+    glueMeter.setIsClamp (false);
 
     auto& vts = processor.getAPVTS();
 
@@ -530,20 +534,19 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
     glueValueLabel.setText    (juce::String::formatted ("%.1f dB",   glueDb),   juce::dontSendNotification);
     ceilingValueLabel.setText (juce::String::formatted ("%.1f dBTP", ceilDbTP), juce::dontSendNotification);
 
-        //// [CML:UI] Stereo TP Meter Feed — L/R Values
-    float inL = -120.0f, inR = -120.0f;
-    float outL = -120.0f, outR = -120.0f;
-
-    if (processor.getCurrentTruePeakDbTP_LR (inL, inR, outL, outR))
+    float inTp = -120.0f;
+    float outTp = -120.0f;
+    if (processor.getCurrentTruePeakDbTP (inTp, outTp))
     {
-        inTpMeter.pushValueDbLR (inL, inR);
-        outTpMeter.pushValueDbLR (outL, outR);
+        inTpMeter.pushValueDb (inTp);
+        outTpMeter.pushValueDb (outTp);
         inTpMeter.repaint();
         outTpMeter.repaint();
 
-        inTpLabel.setText  (juce::String::formatted ("IN TP: %.1f / %.1f",  inL,  inR),  juce::dontSendNotification);
-        outTpLabel.setText (juce::String::formatted ("OUT TP: %.1f / %.1f", outL, outR), juce::dontSendNotification);
+        inTpLabel.setText  (juce::String::formatted ("IN TP: %.1f",  inTp),  juce::dontSendNotification);
+        outTpLabel.setText (juce::String::formatted ("OUT TP: %.1f", outTp), juce::dontSendNotification);
     }
+
     float lufsS = -120.0f;
     float lufsI = -120.0f;
     if (processor.getCurrentLufsDb (lufsS, lufsI))
@@ -578,34 +581,11 @@ void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
     //// [CML:UI] GR module framing — recessed plate + well
     {
         // Compute geometry (all derived from stored rectangles; no magic outside this block)
-        constexpr float kOuterInsetPx   = 10.0f;
-        constexpr float kCavityExpandPx = 18.0f;
-        constexpr float kTabWidthFrac   = 0.18f;
-        constexpr float kTabHeightPx    = 32.0f;
-        constexpr float kTabRiseFrac    = 0.72f;
-
-        constexpr float kOuterCornerPx  = 10.0f;
-        constexpr float kCavityCornerPx = 9.0f;
-        constexpr float kWellCornerPx   = 8.0f;
-
-        constexpr float kPlateTopA      = 0.06f;
-        constexpr float kPlateBotA      = 0.52f;
-        constexpr float kPlateStrokeA   = 0.07f;
-
-        constexpr float kCavityTopA     = 0.62f;
-        constexpr float kCavityBotA     = 0.92f;
-        constexpr float kCavityStrokeA  = 0.05f;
-        constexpr float kBevelHiA       = 0.06f;
-        constexpr float kBevelLoA       = 0.52f;
-
-        constexpr float kWellTopA       = 0.62f;
-        constexpr float kWellBotA       = 0.92f;
-        constexpr float kWellStrokeHiA  = 0.06f;
-        constexpr float kWellStrokeLoA  = 0.55f;
-
-        constexpr float kGlassInsetPx   = 2.0f;
-        constexpr float kGlassHeightFrac= 0.45f;
-        constexpr float kGlassTopA      = 0.06f;
+        constexpr float kOuterInsetPx   = 8.0f;
+        constexpr float kCavityExpandPx = 14.0f;
+        constexpr float kTabWidthFrac   = 0.22f;
+        constexpr float kTabHeightPx    = 34.0f;
+        constexpr float kTabRiseFrac    = 0.65f;
 
         auto outer  = grFullBounds.toFloat().reduced (kOuterInsetPx);
         auto cavity = grWellBounds.toFloat().expanded (kCavityExpandPx, kCavityExpandPx);
@@ -623,30 +603,30 @@ void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
 
         // 1) Outer module plate (vertical gradient + stroke)
         {
-            juce::ColourGradient plate (juce::Colours::white.withAlpha (kPlateTopA),
+            juce::ColourGradient plate (juce::Colours::white.withAlpha (0.08f),
                                         outer.getCentreX(), outer.getY(),
-                                        juce::Colours::black.withAlpha (kPlateBotA),
+                                        juce::Colours::black.withAlpha (0.45f),
                                         outer.getCentreX(), outer.getBottom(),
                                         false);
             g.setGradientFill (plate);
-            g.fillRoundedRectangle (outer, kOuterCornerPx);
+            g.fillRoundedRectangle (outer, 10.0f);
 
-            g.setColour (juce::Colours::white.withAlpha (kPlateStrokeA));
-            g.drawRoundedRectangle (outer, kOuterCornerPx, 1.0f);
+            g.setColour (juce::Colours::white.withAlpha (0.08f));
+            g.drawRoundedRectangle (outer, 10.0f, 1.0f);
         }
 
         // 2) Inner cavity bezel (darker gradient + bevel strokes)
         {
-            juce::ColourGradient cav (juce::Colours::black.withAlpha (kCavityTopA),
+            juce::ColourGradient cav (juce::Colours::black.withAlpha (0.55f),
                                       cavity.getCentreX(), cavity.getY(),
-                                      juce::Colours::black.withAlpha (kCavityBotA),
+                                      juce::Colours::black.withAlpha (0.80f),
                                       cavity.getCentreX(), cavity.getBottom(),
                                       false);
             g.setGradientFill (cav);
-            g.fillRoundedRectangle (cavity, kCavityCornerPx);
+            g.fillRoundedRectangle (cavity, 9.0f);
 
-            g.setColour (juce::Colours::white.withAlpha (kCavityStrokeA));
-            g.drawRoundedRectangle (cavity, kCavityCornerPx, 1.0f);
+            g.setColour (juce::Colours::white.withAlpha (0.06f));
+            g.drawRoundedRectangle (cavity, 9.0f, 1.0f);
 
             // Bevel illusion: top/left highlight + bottom/right shadow
             auto c = cavity.reduced (0.5f, 0.5f);
@@ -655,46 +635,46 @@ void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
             const float x2 = c.getRight();
             const float y2 = c.getBottom();
 
-            g.setColour (juce::Colours::white.withAlpha (kBevelHiA));
+            g.setColour (juce::Colours::white.withAlpha (0.08f));
             g.drawLine (x1, y1, x2, y1, 1.0f);
             g.drawLine (x1, y1, x1, y2, 1.0f);
 
-            g.setColour (juce::Colours::black.withAlpha (kBevelLoA));
+            g.setColour (juce::Colours::black.withAlpha (0.40f));
             g.drawLine (x1, y2, x2, y2, 1.0f);
             g.drawLine (x2, y1, x2, y2, 1.0f);
         }
 
         // 3) Inner well floor (near-black gradient + lip strokes)
         {
-            juce::ColourGradient wf (juce::Colours::black.withAlpha (kWellTopA),
+            juce::ColourGradient wf (juce::Colours::black.withAlpha (0.55f),
                                      well.getCentreX(), well.getY(),
-                                     juce::Colours::black.withAlpha (kWellBotA),
+                                     juce::Colours::black.withAlpha (0.85f),
                                      well.getCentreX(), well.getBottom(),
                                      false);
             g.setGradientFill (wf);
-            g.fillRoundedRectangle (well, kWellCornerPx);
+            g.fillRoundedRectangle (well, 8.0f);
 
-            g.setColour (juce::Colours::white.withAlpha (kWellStrokeHiA));
-            g.drawRoundedRectangle (well, kWellCornerPx, 1.0f);
-            g.setColour (juce::Colours::black.withAlpha (kWellStrokeLoA));
-            g.drawRoundedRectangle (well.reduced (1.0f, 1.0f), (kWellCornerPx - 1.0f), 1.0f);
+            g.setColour (juce::Colours::white.withAlpha (0.07f));
+            g.drawRoundedRectangle (well, 8.0f, 1.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.45f));
+            g.drawRoundedRectangle (well.reduced (1.0f, 1.0f), 7.0f, 1.0f);
         }
 
-        // 4) Glass overlay (clip to well, top highlight) — reduced to avoid “widget sheen”
+        // 4) Glass overlay (clip to well, top highlight)
         {
             juce::Graphics::ScopedSaveState ss (g);
             g.reduceClipRegion (well.toNearestInt());
 
-            auto glass = well.reduced (kGlassInsetPx, kGlassInsetPx);
-            glass.setHeight (glass.getHeight() * kGlassHeightFrac);
+            auto glass = well.reduced (2.0f, 2.0f);
+            glass.setHeight (glass.getHeight() * 0.55f);
 
-            juce::ColourGradient grad (juce::Colours::white.withAlpha (kGlassTopA),
+            juce::ColourGradient grad (juce::Colours::white.withAlpha (0.10f),
                                        glass.getCentreX(), glass.getY(),
                                        juce::Colours::white.withAlpha (0.0f),
                                        glass.getCentreX(), glass.getBottom(),
                                        false);
             g.setGradientFill (grad);
-            g.fillRoundedRectangle (glass, (kWellCornerPx - 1.0f));
+            g.fillRoundedRectangle (glass, 7.0f);
         }
 
         //// [CML:UI] GR header tab — reference-style badge
@@ -706,21 +686,17 @@ void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
             constexpr float kTitleAlpha    = 0.90f;
             constexpr float kValueAlpha    = 0.85f;
 
-            constexpr float kTabTopA       = 0.07f;
-            constexpr float kTabBotA       = 0.62f;
-            constexpr float kTabStrokeA    = 0.07f;
-
             const float grMagDb = juce::jmax (0.0f, lastGrDb);
 
-            juce::ColourGradient tabGrad (juce::Colours::white.withAlpha (kTabTopA),
+            juce::ColourGradient tabGrad (juce::Colours::white.withAlpha (0.09f),
                                           tab.getCentreX(), tab.getY(),
-                                          juce::Colours::black.withAlpha (kTabBotA),
+                                          juce::Colours::black.withAlpha (0.55f),
                                           tab.getCentreX(), tab.getBottom(),
                                           false);
             g.setGradientFill (tabGrad);
             g.fillRoundedRectangle (tab, kTabCornerPx);
 
-            g.setColour (juce::Colours::white.withAlpha (kTabStrokeA));
+            g.setColour (juce::Colours::white.withAlpha (0.08f));
             g.drawRoundedRectangle (tab, kTabCornerPx, kTabStrokePx);
 
             auto tabTop  = tab.withHeight (tab.getHeight() * 0.5f);
@@ -774,6 +750,9 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
     const int grLabelW        = 120;
     const int grLabelH        = 30;
     const int grLabelDY       = 10;
+
+    const int clampGlueGap    = 10;
+
     const int truthNumW       = 140;
     const int truthGap        = 20;
 
@@ -803,6 +782,8 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
     auto bandGR = mainZone.removeFromTop (Layout::grMainZone);
     grFullBounds = bandGR;  // store BEFORE modifying bandGR
     mainZone.removeFromTop (Layout::interBandGap);
+
+    auto bandMiniBars = mainZone.removeFromTop (Layout::clampGlueBars);
     mainZone.removeFromTop (Layout::interBandGap);
 
     auto bandTruth = mainZone.removeFromTop (Layout::truthStrip);
@@ -885,6 +866,8 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
     currentGrLabel.setBounds (valueArea);
 
     // Clamp & Glue mini bars
+    clampMeter.setBounds (bandMiniBars.removeFromLeft (bandMiniBars.getWidth() / 2 - clampGlueGap));
+    glueMeter.setBounds  (bandMiniBars.removeFromRight (bandMiniBars.getWidth() / 2 - clampGlueGap));
 
     // Truth strip: constrained to max width and centered
     auto truthRow = bandTruth.withSizeKeepingCentre (juce::jmin (Layout::truthMaxWidth, bandTruth.getWidth()),

@@ -63,6 +63,26 @@ public:
         return true;
     }
 
+    bool getCurrentTruePeakDbTP_LR (float& inLDbTP, float& inRDbTP,
+                                   float& outLDbTP, float& outRDbTP) const noexcept
+    {
+        MeterSnapshot s{};
+        if (! readMeters (s))
+            return false;
+
+        const double inL  = juce::jlimit (-120.0, 60.0, s.inTpDb[0]);
+        const double inR  = juce::jlimit (-120.0, 60.0, s.inTpDb[1]);
+        const double outL = juce::jlimit (-120.0, 60.0, s.outTpDb[0]);
+        const double outR = juce::jlimit (-120.0, 60.0, s.outTpDb[1]);
+
+        inLDbTP  = (float) inL;
+        inRDbTP  = (float) inR;
+        outLDbTP = (float) outL;
+        outRDbTP = (float) outR;
+        return true;
+    }
+
+
     bool getCurrentLufsDb (float& lufsS, float& lufsI) const noexcept
     {
         MeterSnapshot s{};

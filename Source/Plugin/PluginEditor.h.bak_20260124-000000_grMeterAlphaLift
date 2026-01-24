@@ -1,0 +1,338 @@
+#pragma once
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <cmath>
+#include "PluginProcessor.h"
+
+namespace Layout
+{
+    // Outer frame insets
+    static constexpr int insetL = 18;
+    static constexpr int insetR = 18;
+    static constexpr int insetT = 14;
+    static constexpr int insetB = 14;
+
+    // Vertical band heights
+    static constexpr int topKnobBand   = 140;
+    static constexpr int contextRow    = 40;
+    static constexpr int grMainZone    = 120;
+    static constexpr int clampGlueBars = 40;
+    static constexpr int truthStrip    = 30;
+    static constexpr int interBandGap  = 10;
+
+    // Side meter widths
+    static constexpr int leftTpWidth  = 60;
+    static constexpr int rightTpWidth = 60;
+
+    // Truth strip max width
+    static constexpr int truthMaxWidth = 680;
+}
+
+class GRHistoryMeter final : public juce::Component
+{
+public:
+    void pushValueDb (float grDb) noexcept
+    {
+        if (! std::isfinite (grDb)) grDb = 0.0f;
+
+        // UI contract: GR is stereo authority in positive dB (0..range).
+        constexpr float kRangeDb = 24.0f;
+        lastGrDb = juce::jlimit (0.0f, kRangeDb, grDb);
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        //// [CML:UI] GR meter recessed module — embedded frame
+        constexpr float kCornerPx         = 6.0f;
+        constexpr float kShadowRadiusPx   = 10.0f;
+        constexpr int   kShadowOffsetXPx  = 0;
+        constexpr int   kShadowOffsetYPx  = 2;
+        constexpr float kShadowAlpha      = 0.55f;
+        constexpr float kFrameStrokePx    = 1.0f;
+        constexpr float kFrameStrokeA     = 0.08f;
+        constexpr float kInnerStrokeA     = 0.40f;
+
+        auto r = getLocalBounds().toFloat();
+
+        // Soft ambient occlusion shadow (no glow)
+        {
+            const juce::DropShadow ds (juce::Colours::black.withAlpha (kShadowAlpha),
+                                       (int) std::round (kShadowRadiusPx),
+                                       { kShadowOffsetXPx, kShadowOffsetYPx });
+            ds.drawForRectangle (g, r.toNearestInt());
+        }
+
+        // Outer frame (slightly darker than parent well)
+        {
+            juce::ColourGradient frameGrad (juce::Colours::black.withAlpha (0.35f),
+                                            r.getCentreX(), r.getY(),
+                                            juce::Colours::black.withAlpha (0.70f),
+                                            r.getCentreX(), r.getBottom(),
+                                            false);
+            g.setGradientFill (frameGrad);
+            g.fillRoundedRectangle (r, kCornerPx);
+
+            g.setColour (juce::Colours::white.withAlpha (kFrameStrokeA));
+            g.drawRoundedRectangle (r, kCornerPx, kFrameStrokePx);
+
+            g.setColour (juce::Colours::black.withAlpha (kInnerStrokeA));
+            g.drawRoundedRectangle (r.reduced (1.0f, 1.0f), kCornerPx - 1.0f, kFrameStrokePx);
+        }
+
+        //// [CML:UI] GR meter inner cavity — concave recess
+        constexpr float kCavityInsetPx      = 2.5f;
+        constexpr float kCavityStrokeA      = 0.06f;
+        constexpr float kCavityInnerDarkA   = 0.55f;
+        constexpr float kCavityFillTopA     = 0.70f;
+        constexpr float kCavityFillBotA     = 0.88f;
+        constexpr float kInnerShadowHFrac   = 0.30f;
+        constexpr float kInnerShadowTopA    = 0.14f;
+        constexpr float kInnerShadowBotA    = 0.00f;
+
+        {
+            auto cavity = r.reduced (kCavityInsetPx, kCavityInsetPx);
+            const float cavityCornerPx = juce::jmax (0.0f, kCornerPx - kCavityInsetPx);
+
+            juce::ColourGradient cavGrad (juce::Colours::black.withAlpha (kCavityFillTopA),
+                                          cavity.getCentreX(), cavity.getY(),
+                                          juce::Colours::black.withAlpha (kCavityFillBotA),
+                                          cavity.getCentreX(), cavity.getBottom(),
+                                          false);
+            g.setGradientFill (cavGrad);
+            g.fillRoundedRectangle (cavity, cavityCornerPx);
+
+            // Subtle inner stroke to seat the LEDs into the recess
+            g.setColour (juce::Colours::white.withAlpha (kCavityStrokeA));
+            g.drawRoundedRectangle (cavity, cavityCornerPx, kFrameStrokePx);
+
+            // Very subtle top inner shadow band (concave illusion)
+            auto topBand = cavity;
+            topBand.setHeight (cavity.getHeight() * kInnerShadowHFrac);
+
+            juce::ColourGradient innerSh (juce::Colours::black.withAlpha (kInnerShadowTopA),
+                                          topBand.getCentreX(), topBand.getY(),
+                                          juce::Colours::black.withAlpha (kInnerShadowBotA),
+                                          topBand.getCentreX(), topBand.getBottom(),
+                                          false);
+            g.setGradientFill (innerSh);
+            g.fillRoundedRectangle (topBand, cavityCornerPx);
+
+            // Slight darkening stroke just inside cavity to increase depth without glow
+            g.setColour (juce::Colours::black.withAlpha (kCavityInnerDarkA));
+            g.drawRoundedRectangle (cavity.reduced (1.0f, 1.0f),
+                                    juce::jmax (0.0f, cavityCornerPx - 1.0f),
+                                    kFrameStrokePx);
+        }
+
+        //// [CML:UI] GR meter optical segments — dense continuous scale
+        constexpr float kInsetXPx        = 18.0f;
+        constexpr float kInsetYPx        = 18.0f;
+        constexpr int   kBars            = 120;
+        constexpr float kGapPx           = 1.0f;
+        constexpr float kRangeDb         = 24.0f;
+
+        // Professional palette compression (desaturated; no neon/primaries)
+        constexpr float kDesatMix01       = 0.55f; // 0=full hue, 1=grey
+        constexpr float kActiveAlphaTop   = 0.18f;
+        constexpr float kActiveAlphaBot   = 0.15f;
+        constexpr float kInactAlphaTop    = 0.08f;
+        constexpr float kInactAlphaBot    = 0.10f;
+
+        const juce::Colour cAmber = juce::Colour::fromFloatRGBA (0.80f, 0.58f, 0.22f, 1.0f);
+        const juce::Colour cYell  = juce::Colour::fromFloatRGBA (0.78f, 0.76f, 0.36f, 1.0f);
+        const juce::Colour cGreen = juce::Colour::fromFloatRGBA (0.34f, 0.70f, 0.46f, 1.0f);
+        const juce::Colour cGrey  = juce::Colour::fromFloatRGBA (0.62f, 0.62f, 0.62f, 1.0f);
+
+        auto ledArea = r.reduced (kInsetXPx, kInsetYPx);
+
+        const float totalGapW = kGapPx * (float) (kBars - 1);
+        const float rawBarW   = (ledArea.getWidth() - totalGapW) / (float) kBars;
+        const float barW      = juce::jmax (1.0f, rawBarW);
+
+        const float grNorm = juce::jlimit (0.0f, 1.0f, lastGrDb / kRangeDb);
+        const int lit = (int) std::floor (grNorm * (float) kBars + 0.5f);
+
+        for (int i = 0; i < kBars; ++i)
+        {
+            const float x = ledArea.getX() + (float) i * (barW + kGapPx);
+            juce::Rectangle<float> b (x, ledArea.getY(), barW, ledArea.getHeight());
+
+            const bool isActive = (i < lit);
+
+            // Ramp position across the full scale (amber -> yellow -> soft green)
+            const float t = (kBars > 1) ? ((float) i / (float) (kBars - 1)) : 0.0f;
+
+            juce::Colour base;
+            if (t < 0.50f)
+                base = cAmber.interpolatedWith (cYell, t / 0.50f);
+            else
+                base = cYell.interpolatedWith (cGreen, (t - 0.50f) / 0.50f);
+
+            // Desaturate toward grey for disciplined “serious” read
+            base = base.interpolatedWith (cGrey, kDesatMix01);
+
+            // Very subtle vertical gradient per bar (top slightly brighter than bottom)
+            const float aTop = isActive ? kActiveAlphaTop : kInactAlphaTop;
+            const float aBot = isActive ? kActiveAlphaBot : kInactAlphaBot;
+
+            juce::Colour top = base.withAlpha (aTop);
+            juce::Colour bot = base.withAlpha (aBot);
+
+            juce::ColourGradient seg (top,
+                                      b.getCentreX(), b.getY(),
+                                      bot,
+                                      b.getCentreX(), b.getBottom(),
+                                      false);
+            g.setGradientFill (seg);
+            g.fillRect (b);
+        }
+    }
+
+private:
+    float lastGrDb = 0.0f;
+};
+
+class VerticalPeakMeter final : public juce::Component
+{
+public:
+    void pushValueDb (float newValueDb) noexcept
+    {
+        if (! std::isfinite (newValueDb)) newValueDb = -120.0f;
+
+        newValueDb = juce::jlimit (-120.0f, 6.0f, newValueDb);
+
+        currentPeakDb = newValueDb;
+        if (newValueDb > heldPeakDb) heldPeakDb = newValueDb;
+
+        lastPushedValue = newValueDb;
+    }
+
+    void updatePeakHoldDecay() noexcept
+    {
+        constexpr float decayAlpha = 0.965f;
+
+        if (currentPeakDb < heldPeakDb)
+            heldPeakDb = heldPeakDb * decayAlpha + currentPeakDb * (1.0f - decayAlpha);
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        auto r = getLocalBounds().toFloat();
+
+        g.setColour (juce::Colours::white.withAlpha (0.15f));
+        g.fillRoundedRectangle (r, 6.0f);
+
+        const float fill01 = juce::jlimit (0.0f, 1.0f, (currentPeakDb + 120.0f) / 126.0f);
+        auto fillR = r;
+        fillR.setY (r.getBottom() - r.getHeight() * fill01);
+        fillR.setHeight (r.getHeight() * fill01);
+
+        g.setColour (juce::Colours::white.withAlpha (0.70f));
+        g.fillRoundedRectangle (fillR, 6.0f);
+
+        const float hold01 = juce::jlimit (0.0f, 1.0f, (heldPeakDb + 120.0f) / 126.0f);
+        const float yHold = r.getBottom() - r.getHeight() * hold01;
+
+        g.setColour (juce::Colours::white);
+        g.drawLine (r.getX(), yHold, r.getRight(), yHold, 1.0f);
+    }
+
+private:
+    float currentPeakDb = -120.0f;
+    float heldPeakDb = -120.0f;
+    float lastPushedValue = -120.0f;
+};
+
+class HorizontalClampGlueMeter final : public juce::Component
+{
+public:
+    void pushValue (float val01) noexcept
+    {
+        if (! std::isfinite (val01)) val01 = 0.0f;
+        last01 = juce::jlimit (0.0f, 1.0f, val01);
+    }
+
+    void setIsClamp (bool isClamp) noexcept
+    {
+        clampActive = isClamp;
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        auto r = getLocalBounds().toFloat();
+
+        g.setColour (juce::Colours::white.withAlpha (0.15f));
+        g.fillRoundedRectangle (r, 4.0f);
+
+        auto fillR = r;
+        fillR.setWidth (r.getWidth() * last01);
+
+        const auto fillCol = (clampActive ? juce::Colours::orangered : juce::Colours::limegreen);
+        g.setColour (fillCol.withAlpha (0.70f));
+        g.fillRoundedRectangle (fillR, 4.0f);
+    }
+
+private:
+    float last01 = 0.0f;
+    bool clampActive = false;
+};
+
+class CompassKnobLookAndFeel;
+
+class CompassMasteringLimiterAudioProcessorEditor final
+    : public juce::AudioProcessorEditor
+    , private juce::Timer
+{
+public:
+    explicit CompassMasteringLimiterAudioProcessorEditor (CompassMasteringLimiterAudioProcessor&);
+    ~CompassMasteringLimiterAudioProcessorEditor() override;
+
+    void paint (juce::Graphics&) override;
+    void resized() override;
+
+private:
+    void timerCallback() override;
+
+    CompassMasteringLimiterAudioProcessor& processor;
+
+    std::unique_ptr<CompassKnobLookAndFeel> knobLnf;
+
+    juce::Slider drive;
+    juce::Slider ceiling;
+    juce::Slider trim;
+    juce::ComboBox adaptiveBias;
+    juce::Slider stereoLink;
+    juce::ComboBox oversamplingMin;
+
+    GRHistoryMeter grMeter;
+    juce::Label grTitleLabel;
+    juce::Rectangle<int> grFullBounds;
+    juce::Rectangle<int> grWellBounds;
+    juce::Rectangle<int> grModuleBounds;
+    float lastGrDb = 0.0f;
+    VerticalPeakMeter inTpMeter, outTpMeter;
+    HorizontalClampGlueMeter clampMeter, glueMeter;
+    juce::Label currentGrLabel;
+    juce::Label inTpLabel;
+    juce::Label outTpLabel;
+    juce::Label lufsSLabel;
+    juce::Label lufsILabel;
+
+    juce::Label trimValueLabel;
+    juce::Label glueValueLabel;
+    juce::Label ceilingValueLabel;
+
+    juce::Label inPeakLabel;
+    juce::Label outPeakLabel;
+    juce::Label ceilingLabel;
+    juce::Label trimLabel;
+
+    using APVTS = juce::AudioProcessorValueTreeState;
+    std::unique_ptr<APVTS::SliderAttachment> driveA;
+    std::unique_ptr<APVTS::SliderAttachment> ceilingA;
+    std::unique_ptr<APVTS::SliderAttachment> trimA;
+    std::unique_ptr<APVTS::ComboBoxAttachment> biasA;
+    std::unique_ptr<APVTS::SliderAttachment> linkA;
+    std::unique_ptr<APVTS::ComboBoxAttachment> osA;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompassMasteringLimiterAudioProcessorEditor)
+};

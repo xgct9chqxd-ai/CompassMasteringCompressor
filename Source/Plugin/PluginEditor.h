@@ -41,121 +41,77 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        //// [CML:UI] GR meter recessed module — embedded frame
-        constexpr float kCornerPx         = 6.0f;
-        constexpr float kShadowRadiusPx   = 10.0f;
-        constexpr int   kShadowOffsetXPx  = 0;
-        constexpr int   kShadowOffsetYPx  = 2;
-        constexpr float kShadowAlpha      = 0.55f;
-        constexpr float kFrameStrokePx    = 1.0f;
-        constexpr float kFrameStrokeA     = 0.08f;
-        constexpr float kInnerStrokeA     = 0.40f;
-
+        //// [CML:UI] GR meter LEDs only — paint-owned segments
         auto r = getLocalBounds().toFloat();
 
-        // Soft ambient occlusion shadow (no glow)
-        {
-            const juce::DropShadow ds (juce::Colours::black.withAlpha (kShadowAlpha),
-                                       (int) std::round (kShadowRadiusPx),
-                                       { kShadowOffsetXPx, kShadowOffsetYPx });
-            ds.drawForRectangle (g, r.toNearestInt());
-        }
+        //// [CML:UI] GR meter optical segments — dense continuous scale (adaptive fit)
+        constexpr float kInsetXPx        = 18.0f;
+        constexpr float kInsetYPx        = 18.0f;
+        constexpr int   kBarsMax         = 120;
+        constexpr float kGapPx           = 1.0f;
+        constexpr float kMinBarWPx       = 1.0f;
+        constexpr float kRangeDb         = 24.0f;
 
-        // Outer frame (slightly darker than parent well)
-        {
-            juce::ColourGradient frameGrad (juce::Colours::black.withAlpha (0.35f),
-                                            r.getCentreX(), r.getY(),
-                                            juce::Colours::black.withAlpha (0.70f),
-                                            r.getCentreX(), r.getBottom(),
-                                            false);
-            g.setGradientFill (frameGrad);
-            g.fillRoundedRectangle (r, kCornerPx);
+        // Professional palette compression (desaturated; no neon/primaries)
+        constexpr float kDesatMix01       = 0.42f; // 0=full hue, 1=grey
+        constexpr float kActiveAlphaTop   = 0.52f;
+        constexpr float kActiveAlphaBot   = 0.42f;
+        constexpr float kInactAlphaTop    = 0.14f;
+        constexpr float kInactAlphaBot    = 0.18f;
 
-            g.setColour (juce::Colours::white.withAlpha (kFrameStrokeA));
-            g.drawRoundedRectangle (r, kCornerPx, kFrameStrokePx);
-
-            g.setColour (juce::Colours::black.withAlpha (kInnerStrokeA));
-            g.drawRoundedRectangle (r.reduced (1.0f, 1.0f), kCornerPx - 1.0f, kFrameStrokePx);
-        }
-
-        //// [CML:UI] GR meter inner cavity — concave recess
-        constexpr float kCavityInsetPx      = 2.5f;
-        constexpr float kCavityStrokeA      = 0.06f;
-        constexpr float kCavityInnerDarkA   = 0.55f;
-        constexpr float kCavityFillTopA     = 0.70f;
-        constexpr float kCavityFillBotA     = 0.88f;
-        constexpr float kInnerShadowHFrac   = 0.30f;
-        constexpr float kInnerShadowTopA    = 0.14f;
-        constexpr float kInnerShadowBotA    = 0.00f;
-
-        {
-            auto cavity = r.reduced (kCavityInsetPx, kCavityInsetPx);
-            const float cavityCornerPx = juce::jmax (0.0f, kCornerPx - kCavityInsetPx);
-
-            juce::ColourGradient cavGrad (juce::Colours::black.withAlpha (kCavityFillTopA),
-                                          cavity.getCentreX(), cavity.getY(),
-                                          juce::Colours::black.withAlpha (kCavityFillBotA),
-                                          cavity.getCentreX(), cavity.getBottom(),
-                                          false);
-            g.setGradientFill (cavGrad);
-            g.fillRoundedRectangle (cavity, cavityCornerPx);
-
-            // Subtle inner stroke to seat the LEDs into the recess
-            g.setColour (juce::Colours::white.withAlpha (kCavityStrokeA));
-            g.drawRoundedRectangle (cavity, cavityCornerPx, kFrameStrokePx);
-
-            // Very subtle top inner shadow band (concave illusion)
-            auto topBand = cavity;
-            topBand.setHeight (cavity.getHeight() * kInnerShadowHFrac);
-
-            juce::ColourGradient innerSh (juce::Colours::black.withAlpha (kInnerShadowTopA),
-                                          topBand.getCentreX(), topBand.getY(),
-                                          juce::Colours::black.withAlpha (kInnerShadowBotA),
-                                          topBand.getCentreX(), topBand.getBottom(),
-                                          false);
-            g.setGradientFill (innerSh);
-            g.fillRoundedRectangle (topBand, cavityCornerPx);
-
-            // Slight darkening stroke just inside cavity to increase depth without glow
-            g.setColour (juce::Colours::black.withAlpha (kCavityInnerDarkA));
-            g.drawRoundedRectangle (cavity.reduced (1.0f, 1.0f),
-                                    juce::jmax (0.0f, cavityCornerPx - 1.0f),
-                                    kFrameStrokePx);
-        }
-
-        //// [CML:UI] GR meter LEDs — deterministic block strip
-        constexpr float kInsetXPx      = 18.0f;
-        constexpr float kInsetYPx      = 18.0f;
-        constexpr int   kBlocks        = 60;
-        constexpr float kGapPx         = 1.0f;
-        constexpr float kBlockHeightFr = 0.55f;
-        constexpr float kRangeDb       = 24.0f;
-        constexpr float kLitAlpha      = 0.22f;
-        constexpr float kUnlitAlpha    = 0.55f;
-        constexpr float kTopStrokeA    = 0.08f;
-        constexpr float kTopStrokePx   = 1.0f;
+        const juce::Colour cAmber = juce::Colour::fromFloatRGBA (0.80f, 0.58f, 0.22f, 1.0f);
+        const juce::Colour cYell  = juce::Colour::fromFloatRGBA (0.78f, 0.76f, 0.36f, 1.0f);
+        const juce::Colour cGreen = juce::Colour::fromFloatRGBA (0.34f, 0.70f, 0.46f, 1.0f);
+        const juce::Colour cGrey  = juce::Colour::fromFloatRGBA (0.62f, 0.62f, 0.62f, 1.0f);
 
         auto ledArea = r.reduced (kInsetXPx, kInsetYPx);
 
-        const float bw = (ledArea.getWidth() - kGapPx * (float) (kBlocks - 1)) / (float) kBlocks;
-        const float bh = ledArea.getHeight() * kBlockHeightFr;
-        const float y  = ledArea.getCentreY() - 0.5f * bh;
+        // Choose a bar count that fits deterministically (prevents overflow when width is tight).
+        const float ledW = juce::jmax (0.0f, ledArea.getWidth());
+        const float denom = (kMinBarWPx + kGapPx);
+        const int barsFit = (denom > 0.0f) ? (int) std::floor ((ledW + kGapPx) / denom) : kBarsMax;
+        const int bars = juce::jlimit (1, kBarsMax, barsFit);
+
+        const float totalGapW = kGapPx * (float) (bars - 1);
+        const float rawBarW   = (ledW - totalGapW) / (float) bars;
+        const float barW      = juce::jmax (kMinBarWPx, rawBarW);
 
         const float grNorm = juce::jlimit (0.0f, 1.0f, lastGrDb / kRangeDb);
-        const int lit = (int) std::floor (grNorm * (float) kBlocks + 0.5f);
+        const int lit = (int) std::floor (grNorm * (float) bars + 0.5f);
 
-        for (int i = 0; i < kBlocks; ++i)
+        for (int i = 0; i < bars; ++i)
         {
-            const float x = ledArea.getX() + (float) i * (bw + kGapPx);
-            juce::Rectangle<float> b (x, y, bw, bh);
+            const float x = ledArea.getX() + (float) i * (barW + kGapPx);
+            juce::Rectangle<float> b (x, ledArea.getY(), barW, ledArea.getHeight());
 
-            if (i < lit) g.setColour (juce::Colours::white.withAlpha (kLitAlpha));
-            else         g.setColour (juce::Colours::black.withAlpha (kUnlitAlpha));
+            const bool isActive = (i < lit);
 
+            // Ramp position across the full scale (amber -> yellow -> soft green)
+            const float t = (bars > 1) ? ((float) i / (float) (bars - 1)) : 0.0f;
+
+            juce::Colour base;
+            if (t < 0.50f)
+                base = cAmber.interpolatedWith (cYell, t / 0.50f);
+            else
+                base = cYell.interpolatedWith (cGreen, (t - 0.50f) / 0.50f);
+
+            // Desaturate toward grey for disciplined “serious” read
+            base = base.interpolatedWith (cGrey, kDesatMix01);
+
+            // Very subtle vertical gradient per bar (top slightly brighter than bottom)
+            const float aTop = isActive ? kActiveAlphaTop : kInactAlphaTop;
+            const float aBot = isActive ? kActiveAlphaBot : kInactAlphaBot;
+
+            juce::Colour top = base.withAlpha (aTop);
+            juce::Colour bot = base.withAlpha (aBot);
+
+            juce::ColourGradient seg (top,
+                                      b.getCentreX(), b.getY(),
+                                      bot,
+                                      b.getCentreX(), b.getBottom(),
+                                      false);
+            g.setGradientFill (seg);
             g.fillRect (b);
-
-            g.setColour (juce::Colours::white.withAlpha (kTopStrokeA));
-            g.drawLine (b.getX(), b.getY(), b.getRight(), b.getY(), kTopStrokePx);
         }
     }
 
@@ -163,90 +119,172 @@ private:
     float lastGrDb = 0.0f;
 };
 
-class VerticalPeakMeter final : public juce::Component
+class StereoVerticalLedMeter final : public juce::Component
 {
 public:
-    void pushValueDb (float newValueDb) noexcept
+    void pushValueDbLR (float lDb, float rDb) noexcept
     {
-        if (! std::isfinite (newValueDb)) newValueDb = -120.0f;
+        if (! std::isfinite (lDb)) lDb = kDbFloorDb;
+        if (! std::isfinite (rDb)) rDb = kDbFloorDb;
 
-        newValueDb = juce::jlimit (-120.0f, 6.0f, newValueDb);
+        lDb = juce::jlimit (kDbFloorDb, kDbCeilDb, lDb);
+        rDb = juce::jlimit (kDbFloorDb, kDbCeilDb, rDb);
 
-        currentPeakDb = newValueDb;
-        if (newValueDb > heldPeakDb) heldPeakDb = newValueDb;
+        currentDb[0] = lDb;
+        currentDb[1] = rDb;
 
-        lastPushedValue = newValueDb;
+        if (lDb > heldDb[0]) heldDb[0] = lDb;
+        if (rDb > heldDb[1]) heldDb[1] = rDb;
     }
 
     void updatePeakHoldDecay() noexcept
     {
-        constexpr float decayAlpha = 0.965f;
+        //// [CML:UI] Stereo TP Meter Hold — UI Thread Decay
+        constexpr float kHoldDecayAlpha01 = 0.965f;
 
-        if (currentPeakDb < heldPeakDb)
-            heldPeakDb = heldPeakDb * decayAlpha + currentPeakDb * (1.0f - decayAlpha);
+        for (int c = 0; c < 2; ++c)
+        {
+            if (currentDb[c] < heldDb[c])
+                heldDb[c] = heldDb[c] * kHoldDecayAlpha01 + currentDb[c] * (1.0f - kHoldDecayAlpha01);
+        }
     }
 
     void paint (juce::Graphics& g) override
     {
+        //// [CML:UI] Stereo TP Meter LEDs — L/R Lanes
         auto r = getLocalBounds().toFloat();
 
-        g.setColour (juce::Colours::white.withAlpha (0.15f));
-        g.fillRoundedRectangle (r, 6.0f);
+        constexpr float kBgAlpha01       = 0.07f;
+        constexpr float kCornerPx        = 6.0f;
 
-        const float fill01 = juce::jlimit (0.0f, 1.0f, (currentPeakDb + 120.0f) / 126.0f);
-        auto fillR = r;
-        fillR.setY (r.getBottom() - r.getHeight() * fill01);
-        fillR.setHeight (r.getHeight() * fill01);
+        constexpr float kInsetXPx        = 10.0f;
+        constexpr float kInsetYPx        = 10.0f;
 
-        g.setColour (juce::Colours::white.withAlpha (0.70f));
-        g.fillRoundedRectangle (fillR, 6.0f);
+        constexpr int   kSegN            = 44;
+        constexpr float kSegGapPx        = 1.0f;
 
-        const float hold01 = juce::jlimit (0.0f, 1.0f, (heldPeakDb + 120.0f) / 126.0f);
-        const float yHold = r.getBottom() - r.getHeight() * hold01;
+        constexpr float kLaneGapPx       = 6.0f;
+        constexpr float kMinSegHPx       = 1.0f;
 
-        g.setColour (juce::Colours::white);
-        g.drawLine (r.getX(), yHold, r.getRight(), yHold, 1.0f);
+        constexpr float kActiveAlpha01   = 0.70f;
+        constexpr float kInactiveAlpha01 = 0.12f;
+
+        g.setColour (juce::Colours::white.withAlpha (kBgAlpha01));
+        g.fillRoundedRectangle (r, kCornerPx);
+
+        auto a = r.reduced (kInsetXPx, kInsetYPx);
+
+        const float laneW = (a.getWidth() - kLaneGapPx) * 0.5f;
+        auto laneL = juce::Rectangle<float> (a.getX(), a.getY(), laneW, a.getHeight());
+        auto laneR = juce::Rectangle<float> (a.getX() + laneW + kLaneGapPx, a.getY(), laneW, a.getHeight());
+
+        auto drawLane = [&] (juce::Rectangle<float> lane, int ch)
+        {
+            //// [CML:UI] Stereo TP Meter Palette — Disciplined Ramp
+            constexpr float kDesatMix01 = 0.45f; // 0=full hue, 1=grey
+
+            constexpr float kGreyR  = 0.62f;
+            constexpr float kGreyG  = 0.62f;
+            constexpr float kGreyB  = 0.62f;
+
+            constexpr float kGreenR = 0.30f;
+            constexpr float kGreenG = 0.68f;
+            constexpr float kGreenB = 0.46f;
+
+            constexpr float kYellR  = 0.95f;
+            constexpr float kYellG  = 0.86f;
+            constexpr float kYellB  = 0.40f;
+
+            constexpr float kAmberR = 0.78f;
+            constexpr float kAmberG = 0.44f;
+            constexpr float kAmberB = 0.18f;
+
+            const juce::Colour cGrey  = juce::Colour::fromFloatRGBA (kGreyR,  kGreyG,  kGreyB,  1.0f);
+            const juce::Colour cGreen = juce::Colour::fromFloatRGBA (kGreenR, kGreenG, kGreenB, 1.0f);
+            const juce::Colour cYell  = juce::Colour::fromFloatRGBA (kYellR,  kYellG,  kYellB,  1.0f);
+            const juce::Colour cAmber = juce::Colour::fromFloatRGBA (kAmberR, kAmberG, kAmberB, 1.0f);
+
+            const float totalGapH = kSegGapPx * (float) (kSegN - 1);
+            const float rawSegH   = (lane.getHeight() - totalGapH) / (float) kSegN;
+            const float segHPx    = juce::jmax (kMinSegHPx, rawSegH);
+
+            const float v01 = juce::jlimit (0.0f, 1.0f, (currentDb[ch] - kDbFloorDb) / kDbSpanDb);
+            const int litN = (int) (v01 * (float) kSegN + 0.5f);
+            for (int i = 0; i < kSegN; ++i)
+            {
+                const int idxFromBottom = i;
+                const float y = lane.getBottom() - (float) (idxFromBottom + 1) * segHPx - (float) idxFromBottom * kSegGapPx;
+                juce::Rectangle<float> seg (lane.getX(), y, lane.getWidth(), segHPx);
+
+                const bool isActive = (idxFromBottom < litN);
+
+                if (isActive)
+                {
+                    const float t = (kSegN > 1) ? ((float) idxFromBottom / (float) (kSegN - 1)) : 0.0f;
+
+                    juce::Colour base;
+                    if (t < 0.50f)
+                        base = cGreen.interpolatedWith (cYell, t / 0.50f);
+                    else
+                        base = cYell.interpolatedWith (cAmber, (t - 0.50f) / 0.50f);
+
+                    base = base.interpolatedWith (cGrey, kDesatMix01);
+                    g.setColour (base.withAlpha (kActiveAlpha01));
+                }
+                else
+                {
+                    g.setColour (cGrey.withAlpha (kInactiveAlpha01));
+                }
+
+                g.fillRoundedRectangle (seg, 1.5f);
+            }
+
+            const float h01 = juce::jlimit (0.0f, 1.0f, (heldDb[ch] - kDbFloorDb) / kDbSpanDb);
+            const float yHold = lane.getBottom() - lane.getHeight() * h01;
+
+            g.setColour (juce::Colours::white);
+            g.drawLine (lane.getX(), yHold, lane.getRight(), yHold, 1.0f);
+
+            //// [CML:UI] Stereo TP Meter Ticks — Reference Marks
+            constexpr float kTickAlpha01   = 0.14f;
+            constexpr float kTickStrokePx  = 1.0f;
+            constexpr float kTickInsetPx   = 1.5f;
+            constexpr float kTickLenFrac01 = 0.58f;
+
+            constexpr float kTickDb0   = 0.0f;
+            constexpr float kTickDbM6  = -6.0f;
+            constexpr float kTickDbM12 = -12.0f;
+
+            auto drawTickAtDb = [&] (float tickDb)
+            {
+                const float h01 = juce::jlimit (0.0f, 1.0f, (tickDb - kDbFloorDb) / kDbSpanDb);
+                const float y   = lane.getBottom() - lane.getHeight() * h01;
+
+                const float x0  = lane.getX() + kTickInsetPx;
+                const float x1  = x0 + lane.getWidth() * kTickLenFrac01;
+
+                g.setColour (juce::Colours::white.withAlpha (kTickAlpha01));
+                g.drawLine (x0, y, x1, y, kTickStrokePx);
+            };
+
+            drawTickAtDb (kTickDb0);
+            drawTickAtDb (kTickDbM6);
+            drawTickAtDb (kTickDbM12);
+};
+
+        drawLane (laneL, 0);
+        drawLane (laneR, 1);
     }
 
 private:
-    float currentPeakDb = -120.0f;
-    float heldPeakDb = -120.0f;
-    float lastPushedValue = -120.0f;
+    static constexpr float kDbFloorDb = -120.0f;
+    static constexpr float kDbCeilDb  = 6.0f;
+    static constexpr float kDbSpanDb  = (kDbCeilDb - kDbFloorDb);
+
+    float currentDb[2] = { kDbFloorDb, kDbFloorDb };
+    float heldDb[2]    = { kDbFloorDb, kDbFloorDb };
 };
 
-class HorizontalClampGlueMeter final : public juce::Component
-{
-public:
-    void pushValue (float val01) noexcept
-    {
-        if (! std::isfinite (val01)) val01 = 0.0f;
-        last01 = juce::jlimit (0.0f, 1.0f, val01);
-    }
-
-    void setIsClamp (bool isClamp) noexcept
-    {
-        clampActive = isClamp;
-    }
-
-    void paint (juce::Graphics& g) override
-    {
-        auto r = getLocalBounds().toFloat();
-
-        g.setColour (juce::Colours::white.withAlpha (0.15f));
-        g.fillRoundedRectangle (r, 4.0f);
-
-        auto fillR = r;
-        fillR.setWidth (r.getWidth() * last01);
-
-        const auto fillCol = (clampActive ? juce::Colours::orangered : juce::Colours::limegreen);
-        g.setColour (fillCol.withAlpha (0.70f));
-        g.fillRoundedRectangle (fillR, 4.0f);
-    }
-
-private:
-    float last01 = 0.0f;
-    bool clampActive = false;
-};
 
 class CompassKnobLookAndFeel;
 
@@ -281,8 +319,7 @@ private:
     juce::Rectangle<int> grWellBounds;
     juce::Rectangle<int> grModuleBounds;
     float lastGrDb = 0.0f;
-    VerticalPeakMeter inTpMeter, outTpMeter;
-    HorizontalClampGlueMeter clampMeter, glueMeter;
+    StereoVerticalLedMeter inTpMeter, outTpMeter;
     juce::Label currentGrLabel;
     juce::Label inTpLabel;
     juce::Label outTpLabel;
