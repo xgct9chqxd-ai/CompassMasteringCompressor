@@ -175,12 +175,32 @@ public:
 
         auto a = r.reduced (kInsetXPx, kInsetYPx);
 
-        const float laneW = (a.getWidth() - kLaneGapPx) * 0.5f;
-        auto laneL = juce::Rectangle<float> (a.getX(), a.getY(), laneW, a.getHeight());
-        auto laneR = juce::Rectangle<float> (a.getX() + laneW + kLaneGapPx, a.getY(), laneW, a.getHeight());
+        //// [CML:UI] Meter Scale Strip — Shared L/R
+        constexpr float kScaleStripWPx = 26.0f;
+        constexpr float kScaleGapPx    = 3.0f;
+        constexpr float kMinLaneWPx    = 10.0f;
+
+        auto lanesArea = a;
+        juce::Rectangle<float> scaleL, scaleR;
+        bool drawScale = false;
+
+        const float needW = 2.0f * kScaleStripWPx + 2.0f * kScaleGapPx + kLaneGapPx + 2.0f * kMinLaneWPx;
+        if (lanesArea.getWidth() >= needW)
+        {
+            drawScale = true;
+            scaleL = lanesArea.removeFromLeft (kScaleStripWPx);
+            lanesArea.removeFromLeft (kScaleGapPx);
+            scaleR = lanesArea.removeFromRight (kScaleStripWPx);
+            lanesArea.removeFromRight (kScaleGapPx);
+        }
+
+        const float laneW = (lanesArea.getWidth() - kLaneGapPx) * 0.5f;
+        auto laneL = juce::Rectangle<float> (lanesArea.getX(), lanesArea.getY(), laneW, lanesArea.getHeight());
+        auto laneR = juce::Rectangle<float> (lanesArea.getX() + laneW + kLaneGapPx, lanesArea.getY(), laneW, lanesArea.getHeight());
 
         auto drawLane = [&] (juce::Rectangle<float> lane, int ch)
         {
+
             //// [CML:UI] Stereo TP Meter Palette — Disciplined Ramp
             constexpr float kDesatMix01 = 0.45f; // 0=full hue, 1=grey
 
@@ -246,71 +266,76 @@ public:
             g.setColour (juce::Colours::white);
             g.drawLine (lane.getX(), yHold, lane.getRight(), yHold, 1.0f);
 
-            //// [CML:UI] Stereo TP Meter Side Scale — Inside Ticks + dB Labels
-            constexpr float kScaleAlpha01       = 0.22f;
-            constexpr float kTickStrokePx       = 1.0f;
-            constexpr float kTickMinorLenPx     = 5.0f;
-            constexpr float kTickMajorLenPx     = 9.0f;
-
-            constexpr float kLabelFontPx        = 11.0f;
-            constexpr float kLabelHPx           = 14.0f;
-            constexpr float kLabelWPx           = 26.0f;
-            constexpr float kLabelGapPx         = 3.0f;
-            constexpr float kLabelInsetPx       = 1.0f;
-
-            constexpr int   kTickMinorStepDb    = 6;
-            constexpr int   kTickMajorStepDb    = 12;
-
-            constexpr float kScaleLoAlpha01     = 0.18f;
-            constexpr float kScaleHiAlpha01     = 0.10f;
-
-            const bool isRightLane = (lane.getX() > r.getCentreX());
-
-            auto drawTickAtDb = [&] (float tickDb, bool isMajor)
-            {
-                const float h01 = juce::jlimit (0.0f, 1.0f, (tickDb - kDbFloorDb) / kDbSpanDb);
-                const float y   = lane.getBottom() - lane.getHeight() * h01;
-
-                const float tickLen = isMajor ? kTickMajorLenPx : kTickMinorLenPx;
-
-                const float xEdge  = isRightLane ? lane.getRight() : lane.getX();
-                const float xTick0 = isRightLane ? (xEdge - tickLen) : xEdge;
-                const float xTick1 = isRightLane ? xEdge : (xEdge + tickLen);
-
-                g.setColour (juce::Colours::black.withAlpha (kScaleLoAlpha01));
-                g.drawLine (xTick0, y, xTick1, y, kTickStrokePx);
-                g.setColour (juce::Colours::white.withAlpha (kScaleHiAlpha01));
-                g.drawLine (xTick0, y, xTick1, y, kTickStrokePx);
-
-                if (isMajor)
-                {
-                    const float xLabel = isRightLane
-                        ? (xTick0 - kLabelGapPx - kLabelWPx - kLabelInsetPx)
-                        : (xTick1 + kLabelGapPx + kLabelInsetPx);
-
-                    g.setColour (juce::Colours::white.withAlpha (kScaleAlpha01));
-                    g.setFont (kLabelFontPx);
-                    g.drawText (juce::String ((int) tickDb),
-                                (int) xLabel,
-                                (int) (y - 0.5f * kLabelHPx),
-                                (int) kLabelWPx,
-                                (int) kLabelHPx,
-                                isRightLane ? juce::Justification::right : juce::Justification::left);
-                }
-            };
-
-            const int dbTop   = (int) kDbCeilDb;
-            const int dbBot   = (int) kDbFloorDb;
-
-            for (int db = dbTop; db >= dbBot; db -= kTickMinorStepDb)
-            {
-                const bool isMajor = ((db % kTickMajorStepDb) == 0);
-                drawTickAtDb ((float) db, isMajor);
-            }
 };
 
         drawLane (laneL, 0);
         drawLane (laneR, 1);
+
+        if (drawScale)
+        {
+            //// [CML:UI] Meter Side Scale — Shared Ticks + dB Labels
+            constexpr float kTickStrokePx    = 1.0f;
+            constexpr float kTickMinorLenPx  = 6.0f;
+            constexpr float kTickMajorLenPx  = 10.0f;
+
+            constexpr float kLabelFontPx     = 11.0f;
+            constexpr float kLabelHPx        = 14.0f;
+            constexpr float kLabelInsetXPx   = 1.0f;
+
+            constexpr int   kTickMinorStepDb = 6;
+            constexpr int   kTickMajorStepDb = 12;
+
+            constexpr float kLoA01           = 0.22f;
+            constexpr float kHiA01           = 0.12f;
+            constexpr float kTextA01         = 0.70f;
+
+            auto drawScaleFor = [&] (juce::Rectangle<float> scale, juce::Rectangle<float> laneRef, bool isRightScale)
+            {
+                auto drawTickAtDb = [&] (float tickDb, bool isMajor)
+                {
+                    const float h01s = juce::jlimit (0.0f, 1.0f, (tickDb - kDbFloorDb) / kDbSpanDb);
+                    const float y    = laneRef.getBottom() - laneRef.getHeight() * h01s;
+
+                    const float tickLen = isMajor ? kTickMajorLenPx : kTickMinorLenPx;
+
+                    const float xEdge  = isRightScale ? scale.getX() : scale.getRight();
+                    const float xTick0 = isRightScale ? xEdge : (xEdge - tickLen);
+                    const float xTick1 = isRightScale ? (xEdge + tickLen) : xEdge;
+
+                    g.setColour (juce::Colours::black.withAlpha (kLoA01));
+                    g.drawLine (xTick0, y, xTick1, y, kTickStrokePx);
+                    g.setColour (juce::Colours::white.withAlpha (kHiA01));
+                    g.drawLine (xTick0, y, xTick1, y, kTickStrokePx);
+
+                    if (isMajor)
+                    {
+                        auto rr = juce::Rectangle<float> (scale.getX() + kLabelInsetXPx,
+                                                         y - 0.5f * kLabelHPx,
+                                                         scale.getWidth() - 2.0f * kLabelInsetXPx,
+                                                         kLabelHPx).toNearestInt();
+
+                        g.setFont (kLabelFontPx);
+                        g.setColour (juce::Colours::white.withAlpha (kTextA01));
+                        g.drawText (juce::String ((int) tickDb),
+                                    rr,
+                                    isRightScale ? juce::Justification::left : juce::Justification::right,
+                                    false);
+                    }
+                };
+
+                const int dbTop = (int) kDbCeilDb;
+                const int dbBot = (int) kDbFloorDb;
+
+                for (int db = dbTop; db >= dbBot; db -= kTickMinorStepDb)
+                {
+                    const bool isMajor = ((db % kTickMajorStepDb) == 0);
+                    drawTickAtDb ((float) db, isMajor);
+                }
+            };
+
+            drawScaleFor (scaleL, laneL, false);
+            drawScaleFor (scaleR, laneR, true);
+        }
     }
 
 private:
