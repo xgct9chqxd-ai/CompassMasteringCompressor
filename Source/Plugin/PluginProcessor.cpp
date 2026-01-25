@@ -47,7 +47,7 @@ CompassMasteringLimiterAudioProcessor::createParameterLayout()
         juce::ParameterID { "adaptive_bias", 1 },
         "Adaptive Bias",
         juce::NormalisableRange<float> { 0.0f, 1.0f, 0.5f },
-        0.5f,
+        1.0f,
         juce::String(),
         juce::AudioProcessorParameter::genericParameter,
         [] (float v, int)

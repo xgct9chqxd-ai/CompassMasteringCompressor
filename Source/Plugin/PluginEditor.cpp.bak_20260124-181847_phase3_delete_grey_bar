@@ -362,13 +362,12 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
     //// [CML:UI] Bias readout — fixed identity
     // No interactive component. Slot reserved for static paint only.
 
-    //// [CML:UI] Stereo Link switch — OFF discomfort
-    constexpr float kStereoLinkOffAlpha = 0.47f;
+    //// [CML:UI] Stereo Link switch — binary constraint
     auto updateStereoLinkUi = [this]()
     {
         const bool on = stereoLink.getToggleState();
         stereoLink.setButtonText (on ? "ON" : "OFF");
-        stereoLink.setAlpha (on ? 1.0f : kStereoLinkOffAlpha); // OFF de-emphasized
+        stereoLink.setAlpha (on ? 1.0f : 0.55f); // OFF de-emphasized
     };
 
     stereoLink.setClickingTogglesState (true);
@@ -590,22 +589,43 @@ void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
     g.setFont (14.0f);
     g.drawText ("Compass Mastering Limiter", 16, 10, getWidth() - 32, 20, juce::Justification::left);
 
-    //// [CML:UI] GR module framing — well + tab (plate removed)
+    //// [CML:UI] GR module framing — recessed plate + well
     {
-        // Compute geometry (derived from stored rectangles; no magic outside this block)
-        constexpr float kTabWidthFrac = 0.18f;
-        constexpr float kTabHeightPx  = 32.0f;
-        constexpr float kTabRiseFrac  = 0.72f;
+        // Compute geometry (all derived from stored rectangles; no magic outside this block)
+        constexpr float kOuterInsetPx   = 10.0f;
+        constexpr float kCavityExpandPx = 18.0f;
+        constexpr float kTabWidthFrac   = 0.18f;
+        constexpr float kTabHeightPx    = 32.0f;
+        constexpr float kTabRiseFrac    = 0.72f;
 
-        constexpr float kWellCornerPx  = 8.0f;
-        constexpr float kWellTopA      = 0.62f;
-        constexpr float kWellBotA      = 0.92f;
-        constexpr float kWellStrokeHiA = 0.06f;
-        constexpr float kWellStrokeLoA = 0.55f;
+        constexpr float kOuterCornerPx  = 10.0f;
+        constexpr float kCavityCornerPx = 9.0f;
+        constexpr float kWellCornerPx   = 8.0f;
 
-        auto well = grWellBounds.toFloat();
+        constexpr float kPlateTopA      = 0.06f;
+        constexpr float kPlateBotA      = 0.52f;
+        constexpr float kPlateStrokeA   = 0.07f;
 
-        // Header tab centered above the well (reference-style)
+        constexpr float kCavityTopA     = 0.62f;
+        constexpr float kCavityBotA     = 0.92f;
+        constexpr float kCavityStrokeA  = 0.05f;
+        constexpr float kBevelHiA       = 0.06f;
+        constexpr float kBevelLoA       = 0.52f;
+
+        constexpr float kWellTopA       = 0.62f;
+        constexpr float kWellBotA       = 0.92f;
+        constexpr float kWellStrokeHiA  = 0.06f;
+        constexpr float kWellStrokeLoA  = 0.55f;
+
+        constexpr float kGlassInsetPx   = 2.0f;
+        constexpr float kGlassHeightFrac= 0.45f;
+        constexpr float kGlassTopA      = 0.06f;
+
+        auto outer  = grFullBounds.toFloat().reduced (kOuterInsetPx);
+        auto cavity = grWellBounds.toFloat().expanded (kCavityExpandPx, kCavityExpandPx);
+        auto well   = grWellBounds.toFloat();
+
+        // Define a header tab centered above the well (reference-style)
         const float tabW = well.getWidth() * kTabWidthFrac;
         const float tabH = kTabHeightPx;
         auto tab = juce::Rectangle<float> (
@@ -615,7 +635,50 @@ void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
             tabH
         );
 
-        // Inner well floor only (plate/cavity removed per Phase 3 Option B)
+        // 1) Outer module plate (vertical gradient + stroke)
+        {
+            juce::ColourGradient plate (juce::Colours::white.withAlpha (kPlateTopA),
+                                        outer.getCentreX(), outer.getY(),
+                                        juce::Colours::black.withAlpha (kPlateBotA),
+                                        outer.getCentreX(), outer.getBottom(),
+                                        false);
+            g.setGradientFill (plate);
+            g.fillRoundedRectangle (outer, kOuterCornerPx);
+
+            g.setColour (juce::Colours::white.withAlpha (kPlateStrokeA));
+            g.drawRoundedRectangle (outer, kOuterCornerPx, 1.0f);
+        }
+
+        // 2) Inner cavity bezel (darker gradient + bevel strokes)
+        {
+            juce::ColourGradient cav (juce::Colours::black.withAlpha (kCavityTopA),
+                                      cavity.getCentreX(), cavity.getY(),
+                                      juce::Colours::black.withAlpha (kCavityBotA),
+                                      cavity.getCentreX(), cavity.getBottom(),
+                                      false);
+            g.setGradientFill (cav);
+            g.fillRoundedRectangle (cavity, kCavityCornerPx);
+
+            g.setColour (juce::Colours::white.withAlpha (kCavityStrokeA));
+            g.drawRoundedRectangle (cavity, kCavityCornerPx, 1.0f);
+
+            // Bevel illusion: top/left highlight + bottom/right shadow
+            auto c = cavity.reduced (0.5f, 0.5f);
+            const float x1 = c.getX();
+            const float y1 = c.getY();
+            const float x2 = c.getRight();
+            const float y2 = c.getBottom();
+
+            g.setColour (juce::Colours::white.withAlpha (kBevelHiA));
+            g.drawLine (x1, y1, x2, y1, 1.0f);
+            g.drawLine (x1, y1, x1, y2, 1.0f);
+
+            g.setColour (juce::Colours::black.withAlpha (kBevelLoA));
+            g.drawLine (x1, y2, x2, y2, 1.0f);
+            g.drawLine (x2, y1, x2, y2, 1.0f);
+        }
+
+        // 3) Inner well floor (near-black gradient + lip strokes)
         {
             juce::ColourGradient wf (juce::Colours::black.withAlpha (kWellTopA),
                                      well.getCentreX(), well.getY(),
@@ -631,8 +694,24 @@ void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
             g.drawRoundedRectangle (well.reduced (1.0f, 1.0f), (kWellCornerPx - 1.0f), 1.0f);
         }
 
-        //// [CML:UI] GR header tab — reference-style badge
+        // 4) Glass overlay (clip to well, top highlight) — reduced to avoid “widget sheen”
+        {
+            juce::Graphics::ScopedSaveState ss (g);
+            g.reduceClipRegion (well.toNearestInt());
 
+            auto glass = well.reduced (kGlassInsetPx, kGlassInsetPx);
+            glass.setHeight (glass.getHeight() * kGlassHeightFrac);
+
+            juce::ColourGradient grad (juce::Colours::white.withAlpha (kGlassTopA),
+                                       glass.getCentreX(), glass.getY(),
+                                       juce::Colours::white.withAlpha (0.0f),
+                                       glass.getCentreX(), glass.getBottom(),
+                                       false);
+            g.setGradientFill (grad);
+            g.fillRoundedRectangle (glass, (kWellCornerPx - 1.0f));
+        }
+
+        //// [CML:UI] GR header tab — reference-style badge
         {
             constexpr float kTabCornerPx   = 8.0f;
             constexpr float kTabStrokePx   = 1.0f;
