@@ -359,8 +359,39 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
     setRotary (ceiling);
     ceiling.setLookAndFeel (knobLnf.get());
     addAndMakeVisible (ceiling);
-    //// [CML:UI] Bias readout — fixed identity
-    // No interactive component. Slot reserved for static paint only.
+
+    //// [CML:UI] Bias control — 3-position stepped knob
+    setRotary (bias);
+    bias.setLookAndFeel (knobLnf.get());
+    bias.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+    bias.setRange (0.0, 1.0, 0.5); // hard steps: {0.0, 0.5, 1.0}
+    //// [CML:UI] Bias track removal — no oval behind knob
+    bias.setColour (juce::Slider::rotarySliderFillColourId,    juce::Colours::transparentBlack);
+    bias.setColour (juce::Slider::rotarySliderOutlineColourId, juce::Colours::transparentBlack);
+    addAndMakeVisible (bias);
+
+    constexpr float kBiasReadoutFontPx    = 12.5f;
+    constexpr float kBiasLabelAlpha       = 0.70f;
+    constexpr float kBiasTransparentMax   = 0.25f;
+    constexpr float kBiasAggressiveMin    = 0.75f;
+
+    biasValueLabel.setJustificationType (juce::Justification::centred);
+    biasValueLabel.setFont (juce::Font (kBiasReadoutFontPx));
+    biasValueLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (kBiasLabelAlpha));
+    biasValueLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    biasValueLabel.setInterceptsMouseClicks (false, false);
+    addAndMakeVisible (biasValueLabel);
+
+    auto updateBiasReadout = [this]()
+    {
+        const float v = (float) bias.getValue();
+        if (v <= kBiasTransparentMax)      biasValueLabel.setText ("TRANSPARENT", juce::dontSendNotification);
+        else if (v >= kBiasAggressiveMin) biasValueLabel.setText ("AGGRESSIVE",  juce::dontSendNotification);
+        else                              biasValueLabel.setText ("BALANCED",    juce::dontSendNotification);
+    };
+
+    bias.onValueChange = updateBiasReadout;
+    updateBiasReadout();
 
     //// [CML:UI] Stereo Link switch — OFF discomfort
     constexpr float kStereoLinkOffAlpha = 0.47f;
@@ -506,7 +537,7 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
     driveA   = std::make_unique<APVTS::SliderAttachment> (vts, "drive", drive);
     ceilingA = std::make_unique<APVTS::SliderAttachment> (vts, "ceiling", ceiling);
     trimA    = std::make_unique<APVTS::SliderAttachment> (vts, "trim", trim);
-    // Bias is identity (Phase 2): no UI attachment, non-interactive display-only.
+    biasA    = std::make_unique<APVTS::SliderAttachment> (vts, "adaptive_bias", bias);
     linkA    = std::make_unique<APVTS::ButtonAttachment> (vts, "stereo_link", stereoLink);
     updateStereoLinkUi();
     osA      = std::make_unique<APVTS::ComboBoxAttachment> (vts, "oversampling_min", oversamplingMin);
@@ -519,6 +550,7 @@ CompassMasteringLimiterAudioProcessorEditor::~CompassMasteringLimiterAudioProces
     drive.setLookAndFeel (nullptr);
     ceiling.setLookAndFeel (nullptr);
     trim.setLookAndFeel (nullptr);
+    bias.setLookAndFeel (nullptr);
     knobLnf.reset();
 }
 
@@ -697,7 +729,7 @@ void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
         constexpr int   kBiasValueH_Px = 18;
         constexpr int   kBiasValueTopPad_Px = 6;
 
-        auto r = adaptiveBias.getBounds();
+        auto r = bias.getBounds();
         auto labelR = r.translated (0, -18);
         labelR.setHeight (kBiasLabelH_Px);
 
@@ -824,11 +856,21 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
     auto grHeader  = bandGR.removeFromTop (48);
     auto grBarArea = bandGR.removeFromTop (52);
 
-    //// [CML:UI] Bias slot — static readout bounds
+    //// [CML:UI] Bias slot — square knob bounds + readout
+    constexpr int   kBiasReadoutHpx       = 18;
+    constexpr int   kBiasReadoutGapPx     = 2;
     auto biasBounds = grHeader.removeFromLeft (behaviorW)
                               .withTrimmedTop (behaviorTrimTop)
                               .withHeight (behaviorH);
-    adaptiveBias.setBounds (biasBounds);
+
+    const auto biasKnobBounds = biasBounds.withSizeKeepingCentre (biasBounds.getHeight(),
+                                                                  biasBounds.getHeight());
+    bias.setBounds (biasKnobBounds);
+
+    auto biasReadout = biasBounds.translated (0, biasBounds.getHeight() + kBiasReadoutGapPx);
+    biasReadout.setHeight (kBiasReadoutHpx);
+    biasValueLabel.setBounds (biasReadout);
+
     grHeader.removeFromLeft (behaviorGap);
     //// [CML:UI] Stereo Link pill bounds — right-aligned switch
     const int kStereoLinkPillW = 88;

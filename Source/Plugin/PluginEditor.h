@@ -384,7 +384,7 @@ private:
     juce::Slider drive;
     juce::Slider ceiling;
     juce::Slider trim;
-    juce::ComboBox adaptiveBias;
+    juce::Slider bias;
     juce::TextButton stereoLink;
     juce::ComboBox oversamplingMin;
 
@@ -400,6 +400,7 @@ private:
     juce::Label outTpLabel;
     juce::Label lufsSLabel;
     juce::Label lufsILabel;
+    juce::Label biasValueLabel;
 
     juce::Label trimValueLabel;
     juce::Label glueValueLabel;
@@ -414,7 +415,7 @@ private:
     std::unique_ptr<APVTS::SliderAttachment> driveA;
     std::unique_ptr<APVTS::SliderAttachment> ceilingA;
     std::unique_ptr<APVTS::SliderAttachment> trimA;
-    std::unique_ptr<APVTS::ComboBoxAttachment> biasA;
+    std::unique_ptr<APVTS::SliderAttachment> biasA;
     std::unique_ptr<APVTS::ButtonAttachment> linkA;
     std::unique_ptr<APVTS::ComboBoxAttachment> osA;
 
