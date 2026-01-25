@@ -82,15 +82,25 @@ layout.add(std::make_unique<juce::AudioParameterFloat>(
     [](const juce::String& s) { return s.getFloatValue(); }
 ));
 
+    //// [CML:STATE] Stereo Link law — binary constraint
     layout.add (std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID { "stereo_link", 1 },
         "Stereo Link",
-        juce::NormalisableRange<float> { 0.0f, 1.0f, 0.0001f },
+        juce::NormalisableRange<float> { 0.0f, 1.0f, 1.0f },
         1.0f,
         juce::String(),
         juce::AudioProcessorParameter::genericParameter,
-        [] (float v, int) { return juce::String (v * 100.0f, 1) + " %"; },
-        [] (const juce::String& s) { return s.getFloatValue() / 100.0f; }
+        [] (float v, int)
+        {
+            return (v >= 0.5f ? juce::String ("ON") : juce::String ("OFF"));
+        },
+        [] (const juce::String& s)
+        {
+            if (s.equalsIgnoreCase ("ON"))  return 1.0f;
+            if (s.equalsIgnoreCase ("OFF")) return 0.0f;
+            const float v = s.getFloatValue();
+            return (v >= 0.5f ? 1.0f : 0.0f);
+        }
     ));
 
     layout.add (std::make_unique<juce::AudioParameterChoice>(

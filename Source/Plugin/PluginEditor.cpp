@@ -359,13 +359,26 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
     setRotary (ceiling);
     ceiling.setLookAndFeel (knobLnf.get());
     addAndMakeVisible (ceiling);
-    adaptiveBias.addItem ("Transparent", 1);
-    adaptiveBias.addItem ("Balanced", 2);
-    adaptiveBias.addItem ("Aggressive", 3);
-    addAndMakeVisible (adaptiveBias);
+    //// [CML:UI] Bias readout — fixed identity
+    // No interactive component. Slot reserved for static paint only.
 
-    stereoLink.setSliderStyle (juce::Slider::LinearHorizontal);
-    stereoLink.setTextBoxStyle (juce::Slider::TextBoxRight, false, 90, 20);
+    //// [CML:UI] Stereo Link switch — binary constraint
+    auto updateStereoLinkUi = [this]()
+    {
+        const bool on = stereoLink.getToggleState();
+        stereoLink.setButtonText (on ? "ON" : "OFF");
+        stereoLink.setAlpha (on ? 1.0f : 0.55f); // OFF de-emphasized
+    };
+
+    stereoLink.setClickingTogglesState (true);
+    stereoLink.setTriggeredOnMouseDown (true);
+    stereoLink.onClick = updateStereoLinkUi;
+
+    stereoLink.setColour (juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+    stereoLink.setColour (juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+    stereoLink.setColour (juce::TextButton::textColourOffId, juce::Colours::white.withAlpha (0.80f));
+    stereoLink.setColour (juce::TextButton::textColourOnId,  juce::Colours::white.withAlpha (0.90f));
+
     addAndMakeVisible (stereoLink);
 
     oversamplingMin.addItem ("2x", 1);
@@ -492,8 +505,9 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
     driveA   = std::make_unique<APVTS::SliderAttachment> (vts, "drive", drive);
     ceilingA = std::make_unique<APVTS::SliderAttachment> (vts, "ceiling", ceiling);
     trimA    = std::make_unique<APVTS::SliderAttachment> (vts, "trim", trim);
-    biasA    = std::make_unique<APVTS::ComboBoxAttachment> (vts, "adaptive_bias", adaptiveBias);
-    linkA    = std::make_unique<APVTS::SliderAttachment> (vts, "stereo_link", stereoLink);
+    // Bias is identity (Phase 2): no UI attachment, non-interactive display-only.
+    linkA    = std::make_unique<APVTS::ButtonAttachment> (vts, "stereo_link", stereoLink);
+    updateStereoLinkUi();
     osA      = std::make_unique<APVTS::ComboBoxAttachment> (vts, "oversampling_min", oversamplingMin);
 
     startTimerHz (30);
@@ -751,7 +765,34 @@ void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
 
     drawLabelAbove (drive,           "Glue");
     drawLabelAbove (ceiling,         "Ceiling");
-    drawLabelAbove (adaptiveBias,    "Adaptive Bias");
+
+    //// [CML:UI] Bias label/value — static readout
+    {
+        constexpr float kBiasLabelAlpha = 0.70f;
+        constexpr float kBiasValueAlpha = 0.88f;
+        constexpr float kBiasLabelFontPx = 12.5f;
+        constexpr float kBiasValueFontPx = 13.0f;
+        constexpr int   kBiasLabelH_Px = 16;
+        constexpr int   kBiasValueH_Px = 18;
+        constexpr int   kBiasValueTopPad_Px = 6;
+
+        auto r = adaptiveBias.getBounds();
+        auto labelR = r.translated (0, -18);
+        labelR.setHeight (kBiasLabelH_Px);
+
+        g.setColour (juce::Colours::white.withAlpha (kBiasLabelAlpha));
+        g.setFont (kBiasLabelFontPx);
+        g.drawText ("BIAS", labelR, juce::Justification::centred, false);
+
+        auto valueR = r;
+        valueR.setHeight (kBiasValueH_Px);
+        valueR.setY (r.getY() + kBiasValueTopPad_Px);
+
+        g.setColour (juce::Colours::white.withAlpha (kBiasValueAlpha));
+        g.setFont (juce::Font ((float) kBiasValueFontPx, juce::Font::bold));
+        g.drawText ("PROTECTIVE", valueR, juce::Justification::centred, false);
+    }
+
     drawLabelAbove (stereoLink,      "Stereo Link");
     drawLabelAbove (oversamplingMin, "Oversampling Min");
 }
@@ -862,9 +903,19 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
     auto grHeader  = bandGR.removeFromTop (48);
     auto grBarArea = bandGR.removeFromTop (52);
 
-    adaptiveBias.setBounds (grHeader.removeFromLeft (behaviorW).withTrimmedTop (behaviorTrimTop).withHeight (behaviorH));
+    //// [CML:UI] Bias slot — static readout bounds
+    auto biasBounds = grHeader.removeFromLeft (behaviorW)
+                              .withTrimmedTop (behaviorTrimTop)
+                              .withHeight (behaviorH);
+    adaptiveBias.setBounds (biasBounds);
     grHeader.removeFromLeft (behaviorGap);
-    stereoLink.setBounds (grHeader.withTrimmedTop (behaviorTrimTop).withHeight (behaviorH));
+    //// [CML:UI] Stereo Link pill bounds — right-aligned switch
+    const int kStereoLinkPillW = 88;
+    auto linkBounds = grHeader.removeFromRight (kStereoLinkPillW)
+                              .withTrimmedTop (behaviorTrimTop)
+                              .withHeight (behaviorH)
+                              .reduced (0, 2);
+    stereoLink.setBounds (linkBounds);
 
     const int wellPadX = 18;
     const int wellH    = 74;

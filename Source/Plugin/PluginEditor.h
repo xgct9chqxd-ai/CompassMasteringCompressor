@@ -175,28 +175,41 @@ public:
 
         auto a = r.reduced (kInsetXPx, kInsetYPx);
 
-        //// [CML:UI] Meter Scale Strip — Shared L/R
-        constexpr float kScaleStripWPx = 26.0f;
-        constexpr float kScaleGapPx    = 3.0f;
-        constexpr float kMinLaneWPx    = 10.0f;
+        //// [CML:UI] Meter Scale Strip — Shared L/R (Adaptive Width)
+        constexpr float kScaleStripWPx         = 18.0f;
+        constexpr float kScaleGapPx            = 2.0f;
+
+        constexpr float kMinLaneWPx            = 10.0f;
+        constexpr float kMinScaleStripWPx      = 10.0f;
+        constexpr float kMinTextScaleStripWPx  = 14.0f;
+
+        constexpr float kMinLanesAreaWPx       = 2.0f * kMinLaneWPx + kLaneGapPx;
 
         auto lanesArea = a;
         juce::Rectangle<float> scaleL, scaleR;
-        bool drawScale = false;
 
-        const float needW = 2.0f * kScaleStripWPx + 2.0f * kScaleGapPx + kLaneGapPx + 2.0f * kMinLaneWPx;
-        if (lanesArea.getWidth() >= needW)
+        bool drawScaleTicks = false;
+        bool drawScaleText  = false;
+
+        const float minNeedW = 2.0f * kMinScaleStripWPx + 2.0f * kScaleGapPx + kMinLanesAreaWPx;
+        if (lanesArea.getWidth() >= minNeedW)
         {
-            drawScale = true;
-            scaleL = lanesArea.removeFromLeft (kScaleStripWPx);
+            drawScaleTicks = true;
+
+            const float availForScale = lanesArea.getWidth() - kMinLanesAreaWPx - 2.0f * kScaleGapPx;
+            const float scaleStripW = juce::jlimit (kMinScaleStripWPx, kScaleStripWPx, 0.5f * availForScale);
+
+            scaleL = lanesArea.removeFromLeft (scaleStripW);
             lanesArea.removeFromLeft (kScaleGapPx);
-            scaleR = lanesArea.removeFromRight (kScaleStripWPx);
+            scaleR = lanesArea.removeFromRight (scaleStripW);
             lanesArea.removeFromRight (kScaleGapPx);
+
+            drawScaleText = (scaleL.getWidth() >= kMinTextScaleStripWPx) && (scaleR.getWidth() >= kMinTextScaleStripWPx);
         }
 
         const float laneW = (lanesArea.getWidth() - kLaneGapPx) * 0.5f;
-        auto laneL = juce::Rectangle<float> (lanesArea.getX(), lanesArea.getY(), laneW, lanesArea.getHeight());
-        auto laneR = juce::Rectangle<float> (lanesArea.getX() + laneW + kLaneGapPx, lanesArea.getY(), laneW, lanesArea.getHeight());
+        auto laneL = juce::Rectangle<float> (lanesArea.getX(), a.getY(), laneW, a.getHeight());
+        auto laneR = juce::Rectangle<float> (lanesArea.getX() + laneW + kLaneGapPx, a.getY(), laneW, a.getHeight());
 
         auto drawLane = [&] (juce::Rectangle<float> lane, int ch)
         {
@@ -271,15 +284,15 @@ public:
         drawLane (laneL, 0);
         drawLane (laneR, 1);
 
-        if (drawScale)
+        if (drawScaleTicks)
         {
-            //// [CML:UI] Meter Side Scale — Shared Ticks + dB Labels
+            //// [CML:UI] Meter Side Scale — Shared Ticks + Optional dB Labels
             constexpr float kTickStrokePx    = 1.0f;
-            constexpr float kTickMinorLenPx  = 6.0f;
-            constexpr float kTickMajorLenPx  = 10.0f;
+            constexpr float kTickMinorLenPx  = 5.0f;
+            constexpr float kTickMajorLenPx  = 9.0f;
 
-            constexpr float kLabelFontPx     = 11.0f;
-            constexpr float kLabelHPx        = 14.0f;
+            constexpr float kLabelFontPx     = 10.0f;
+            constexpr float kLabelHPx        = 13.0f;
             constexpr float kLabelInsetXPx   = 1.0f;
 
             constexpr int   kTickMinorStepDb = 6;
@@ -307,7 +320,7 @@ public:
                     g.setColour (juce::Colours::white.withAlpha (kHiA01));
                     g.drawLine (xTick0, y, xTick1, y, kTickStrokePx);
 
-                    if (isMajor)
+                    if (drawScaleText && isMajor)
                     {
                         auto rr = juce::Rectangle<float> (scale.getX() + kLabelInsetXPx,
                                                          y - 0.5f * kLabelHPx,
@@ -372,7 +385,7 @@ private:
     juce::Slider ceiling;
     juce::Slider trim;
     juce::ComboBox adaptiveBias;
-    juce::Slider stereoLink;
+    juce::TextButton stereoLink;
     juce::ComboBox oversamplingMin;
 
     GRHistoryMeter grMeter;
@@ -402,7 +415,7 @@ private:
     std::unique_ptr<APVTS::SliderAttachment> ceilingA;
     std::unique_ptr<APVTS::SliderAttachment> trimA;
     std::unique_ptr<APVTS::ComboBoxAttachment> biasA;
-    std::unique_ptr<APVTS::SliderAttachment> linkA;
+    std::unique_ptr<APVTS::ButtonAttachment> linkA;
     std::unique_ptr<APVTS::ComboBoxAttachment> osA;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompassMasteringLimiterAudioProcessorEditor)
