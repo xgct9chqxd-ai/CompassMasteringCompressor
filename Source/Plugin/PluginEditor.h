@@ -79,21 +79,46 @@ public:
         const float grNorm = juce::jlimit (0.0f, 1.0f, lastGrDb / kRangeDb);
         const int lit = (int) std::floor (grNorm * (float) bars + 0.5f);
 
+        //// [CML:UI] GR meter ramp — continuous gradient sampling
+        constexpr float kRampMidPos01    = 0.50f;
+        constexpr float kRampHiPos01     = 0.75f;
+        constexpr float kRampHiBlendYG01 = 0.55f;
+
+        const juce::Colour cHi = cYell.interpolatedWith (cGreen, kRampHiBlendYG01);
+
+        juce::ColourGradient ramp (cAmber, 0.0f, 0.0f,
+                                   cGreen, 1.0f, 0.0f,
+                                   false);
+        ramp.addColour (kRampMidPos01, cYell);
+        ramp.addColour (kRampHiPos01, cHi);
+
+        //// [CML:UI] GR meter integer layout — stable gaps
+        const auto ledI = ledArea.toNearestInt();
+        const int ledX = ledI.getX();
+        const int ledY = ledI.getY();
+        const int ledHPx = ledI.getHeight();
+        const int ledWPx = juce::jmax (0, ledI.getWidth());
+
+        constexpr int kGapIPx = 1;
+
+        const int usableWPx = juce::jmax (0, ledWPx - kGapIPx * (bars - 1));
+        const int barWBasePx = juce::jmax (1, usableWPx / bars);
+        const int usedWPx    = barWBasePx * bars + kGapIPx * (bars - 1);
+        const int remPx      = juce::jlimit (0, bars, ledWPx - usedWPx);
+
+        int xPx = ledX;
+
         for (int i = 0; i < bars; ++i)
         {
-            const float x = ledArea.getX() + (float) i * (barW + kGapPx);
-            juce::Rectangle<float> b (x, ledArea.getY(), barW, ledArea.getHeight());
+            const int barWPx = barWBasePx + (i < remPx ? 1 : 0);
+            juce::Rectangle<float> b ((float) xPx, (float) ledY, (float) barWPx, (float) ledHPx);
+            xPx += barWPx + kGapIPx;
 
             const bool isActive = (i < lit);
 
-            // Ramp position across the full scale (amber -> yellow -> soft green)
             const float t = (bars > 1) ? ((float) i / (float) (bars - 1)) : 0.0f;
 
-            juce::Colour base;
-            if (t < 0.50f)
-                base = cAmber.interpolatedWith (cYell, t / 0.50f);
-            else
-                base = cYell.interpolatedWith (cGreen, (t - 0.50f) / 0.50f);
+            juce::Colour base = ramp.getColourAtPosition (juce::jlimit (0.0f, 1.0f, t));
 
             // Desaturate toward grey for disciplined “serious” read
             base = base.interpolatedWith (cGrey, kDesatMix01);

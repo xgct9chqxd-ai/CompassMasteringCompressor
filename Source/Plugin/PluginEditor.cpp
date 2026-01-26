@@ -1,14 +1,14 @@
 #include "PluginEditor.h"
 #include <unordered_map>
 #include <random>
+#include <functional>
 
 //==============================================================================
 // HELPER: Sets up a rotary slider with "Stealth" text box
 static void setRotary(juce::Slider &s)
 {
     s.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    //// [CML:UI] Knob Value Entry — No Slider TextBox
-    s.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
     s.setColour(juce::Slider::textBoxTextColourId, juce::Colours::transparentBlack);
     s.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     s.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
@@ -129,6 +129,24 @@ public:
         g.drawImageAt(noiseCache, 0, 0);
     }
 
+    // --- CPU Optimization: Cache the entire editor background ---
+    juce::Image backgroundCache;
+
+    // This method handles the caching logic for the editor background.
+    // It takes a lambda 'drawFunction' which contains the heavy drawing code.
+    // If the cache is valid, it simply draws the image. If not, it calls the lambda to generate it.
+    void drawBufferedBackground(juce::Graphics &g, int w, int h, std::function<void(juce::Graphics &)> drawFunction)
+    {
+        if (backgroundCache.isNull() || backgroundCache.getWidth() != w || backgroundCache.getHeight() != h)
+        {
+            backgroundCache = juce::Image(juce::Image::RGB, w, h, true);
+            juce::Graphics g2(backgroundCache);
+            drawFunction(g2);
+        }
+
+        g.drawImageAt(backgroundCache, 0, 0);
+    }
+
     // --- CPU Optimization: Cache the static knob body ---
     // [Pro Fix]: Use unordered_map for O(1) lookup speed instead of logN
     std::unordered_map<int, juce::Image> knobCache;
@@ -148,7 +166,10 @@ public:
             auto bounds = juce::Rectangle<float>((float)width, (float)height);
             float side = juce::jmin((float)width, (float)height);
             auto center = bounds.getCentre();
-            float r = side * 0.5f;
+
+            // [Pro Fix]: Reduce radius so external ticks (1.28x) fit within bounds
+            // previously: float r = side * 0.5f;
+            float r = (side * 0.5f) / 1.3f;
 
             // --- A. Recessed Well ---
             {
@@ -161,6 +182,8 @@ public:
             }
 
             // --- B. Scale Markings (Major/Minor Ticks) ---
+            // [Optimization]: Moved High-Visibility Static Ticks INTO the cache.
+            // This prevents recalculating and drawing 24 anti-aliased lines per knob per frame.
             {
                 int numTicks = 24;
                 float tickR_Inner = r * 1.18f;
@@ -173,7 +196,9 @@ public:
                     float angle = startAngle + (float)i / (float)numTicks * (endAngle - startAngle);
 
                     float outerR = isMajor ? tickR_Outer_Major : tickR_Outer_Minor;
-                    g2.setColour(juce::Colours::white.withAlpha(isMajor ? 0.25f : 0.1f)); // Brighter major ticks
+
+                    // High visibility always (matches previous request)
+                    g2.setColour(juce::Colours::white.withAlpha(isMajor ? 1.0f : 0.6f));
 
                     juce::Line<float> tick(center.getPointOnCircumference(tickR_Inner, angle),
                                            center.getPointOnCircumference(outerR, angle));
@@ -204,56 +229,20 @@ public:
 
         g.drawImageAt(bgImage, x, y);
 
-        // 2. Dynamic Elements (Ticks + Pointer)
+        // 2. Dynamic Elements (Pointer Only)
+        // [Optimization]: Removed the secondary tick loop from here.
         auto bounds = juce::Rectangle<float>((float)x, (float)y, (float)width, (float)height);
         float side = juce::jmin((float)width, (float)height);
         auto center = bounds.getCentre();
-        float r = side * 0.5f;
+
+        // [Pro Fix]: Match cached radius scaling to ensure alignment
+        // previously: float r = side * 0.5f;
+        float r = (side * 0.5f) / 1.3f;
+
         float bodyR = r * 0.85f;
         float faceR = bodyR * 0.9f;
 
         float angle = startAngle + pos * (endAngle - startAngle);
-
-        // --- B. Dynamic Scale Markings (Ghost Ticks) ---
-        // Moved out of cache so we can light up the active tick
-        {
-            int numTicks = 24;
-            float tickR_Inner = r * 1.18f;
-            float tickR_Outer_Major = r * 1.28f;
-            float tickR_Outer_Minor = r * 1.23f;
-            const float twoPi = 2.0f * juce::MathConstants<float>::pi;
-
-            for (int i = 0; i <= numTicks; ++i)
-            {
-                float tickAngle = startAngle + (float)i / (float)numTicks * (endAngle - startAngle);
-                bool isMajor = (i % 4 == 0);
-
-                // [Pro Fix]: Compute wrapped angular distance to handle wrap-around correctly
-                float diff = tickAngle - angle;
-
-                // Normalize diff to -PI...PI range
-                while (diff <= -juce::MathConstants<float>::pi)
-                    diff += twoPi;
-                while (diff > juce::MathConstants<float>::pi)
-                    diff -= twoPi;
-
-                float dist = std::abs(diff);
-                bool isClose = dist < 0.15f;
-
-                float outerR = isMajor ? tickR_Outer_Major : tickR_Outer_Minor;
-
-                // Base alpha + proximity boost
-                float alpha = isMajor ? 0.25f : 0.1f;
-                if (isClose)
-                    alpha += 0.3f; // Significant boost for "active" tick
-
-                g.setColour(juce::Colours::white.withAlpha(alpha));
-
-                juce::Line<float> tick(center.getPointOnCircumference(tickR_Inner, tickAngle),
-                                       center.getPointOnCircumference(outerR, tickAngle));
-                g.drawLine(tick, isMajor ? 1.5f : 1.0f);
-            }
-        }
 
         // --- Pointer ---
         juce::Path p;
@@ -262,18 +251,12 @@ public:
         p.addRoundedRectangle(-ptrW * 0.5f, -faceR + 6.0f, ptrW, ptrLen, 1.0f);
 
         auto xf = juce::AffineTransform::rotation(angle).translated(center);
-        bool active = slider.isMouseOverOrDragging();
 
         // [Refinement]: Unify Pointer Color - All white now
         juce::Colour activeColor = juce::Colours::white;
 
-        // Glow if active
-        if (active)
-        {
-            g.setColour(activeColor.withAlpha(0.25f));
-            g.strokePath(p, juce::PathStrokeType(5.0f), xf);
-        }
-        g.setColour(active ? activeColor : juce::Colours::black.withAlpha(0.6f));
+        // [Pro Fix]: Pointer ("Notch") always white, regardless of hover state
+        g.setColour(activeColor.withAlpha(0.9f));
         g.fillPath(p, xf);
     }
 };
@@ -351,64 +334,6 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
     makeLabel(glueValueLabel, 14.0f, true);
     makeLabel(ceilingValueLabel, 14.0f, true);
 
-    //// [CML:UI] Inline Value Labels — Click To Edit
-    auto setupInlineValueLabel = [&] (juce::Label& l, const juce::String& paramID)
-    {
-        l.setInterceptsMouseClicks(true, true);
-        l.setEditable(false, true, false);
-
-        l.setColour(juce::Label::backgroundColourId, juce::Colours::transparentBlack);
-        l.setColour(juce::Label::outlineColourId, juce::Colours::transparentBlack);
-        l.setColour(juce::Label::textWhenEditingColourId, juce::Colours::white.withAlpha(0.90f));
-
-        l.onEditorShow = [&l]
-        {
-            if (auto* ed = l.getCurrentTextEditor())
-            {
-                ed->setColour(juce::TextEditor::backgroundColourId, juce::Colours::transparentBlack);
-                ed->setColour(juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
-                ed->setColour(juce::TextEditor::shadowColourId, juce::Colours::transparentBlack);
-                ed->setJustification(juce::Justification::centred);
-                ed->selectAll();
-            }
-        };
-
-        l.onEditorHide = [this, &l, paramID]
-        {
-            auto raw = l.getText().trim();
-
-            // Keep only numeric-friendly characters
-            juce::String filtered;
-            filtered.preallocateBytes(raw.getNumBytesAsUTF8());
-            for (auto ch : raw)
-            {
-                if (juce::CharacterFunctions::isDigit(ch) || ch == '-' || ch == '+' || ch == '.' || ch == 'e' || ch == 'E')
-                    filtered += juce::String::charToString(ch);
-            }
-
-            auto* p = processor.getAPVTS().getParameter(paramID);
-            if (p == nullptr)
-                return;
-
-            const float v = (float) filtered.getDoubleValue();
-
-            if (auto* pf = dynamic_cast<juce::AudioParameterFloat*>(p))
-            {
-                const float clamped = juce::jlimit(pf->range.start, pf->range.end, v);
-                const float norm = pf->range.convertTo0to1(clamped);
-                pf->setValueNotifyingHost(norm);
-            }
-            else
-            {
-                p->setValueNotifyingHost(p->getValueForText(filtered));
-            }
-        };
-    };
-
-    setupInlineValueLabel(trimValueLabel, "trim");
-    setupInlineValueLabel(glueValueLabel, "drive");
-    setupInlineValueLabel(ceilingValueLabel, "ceiling");
-
     auto makeSurgical = [&](juce::Label &l)
     {
         l.setFont(10.0f);
@@ -452,191 +377,210 @@ CompassMasteringLimiterAudioProcessorEditor::~CompassMasteringLimiterAudioProces
 
 void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
 {
-    // [Optimization]: Static variables used here for single-file demonstration.
-    // In production, move these to the class header (PluginEditor.h) to support multiple plugin instances correctly.
+    // [Optimization]: Static variables for caching previous states
     static float lastGr = -1000.0f;
+    static float lastInL = -1000.0f;
+    static float lastInR = -1000.0f;
+    static float lastOutL = -1000.0f;
+    static float lastOutR = -1000.0f;
 
+    // --- 1. Gain Reduction Meter ---
     float gr = processor.getCurrentGRDb();
-
-    // Pro Pattern: Threshold check to prevent redundant repaints for GR
-    // Only update if value changes by more than 0.05 dB
     if (std::abs(gr - lastGr) > 0.05f)
     {
-        // [Fix]: Pass raw GR value. Forced negative polarity (-abs) caused issues with the specific meter type.
         grMeter.pushValueDb(gr);
         grMeter.repaint();
         currentGrLabel.setText(juce::String::formatted("%.1f dB", std::abs(gr)), juce::dontSendNotification);
         lastGr = gr;
     }
 
+    // --- 2. Text Labels (Static update is cheap) ---
     auto &vts = processor.getAPVTS();
-    if (! trimValueLabel.isBeingEdited())
-        trimValueLabel.setText(juce::String::formatted("%.1f dB", vts.getRawParameterValue("trim")->load()), juce::dontSendNotification);
+    trimValueLabel.setText(juce::String::formatted("%.1f dB", vts.getRawParameterValue("trim")->load()), juce::dontSendNotification);
+    glueValueLabel.setText(juce::String::formatted("%.1f %%", vts.getRawParameterValue("drive")->load()), juce::dontSendNotification);
+    ceilingValueLabel.setText(juce::String::formatted("%.1f dB", vts.getRawParameterValue("ceiling")->load()), juce::dontSendNotification);
 
-    if (! glueValueLabel.isBeingEdited())
-        glueValueLabel.setText(juce::String::formatted("%.1f %%", vts.getRawParameterValue("drive")->load()), juce::dontSendNotification);
-
-    if (! ceilingValueLabel.isBeingEdited())
-        ceilingValueLabel.setText(juce::String::formatted("%.1f dB", vts.getRawParameterValue("ceiling")->load()), juce::dontSendNotification);
-
+    // --- 3. Input / Output Meters ---
     float inL, inR, outL, outR;
-    // [Fix]: Unconditional update to ensure meters don't freeze if return check fails.
     processor.getCurrentTruePeakDbTP_LR(inL, inR, outL, outR);
 
-    // [Fix]: Unconditional update for Input/Output Meters
-    // Removed threshold check because it was preventing the internal peak-hold decay
-    // animation from running when the audio level was stable.
-    inTpMeter.pushValueDbLR(inL, inR);
-    outTpMeter.pushValueDbLR(outL, outR);
+    // [Optimization]: Only push values and repaint if levels have changed.
+    // This prevents the meter backgrounds from being redrawn unnecessarily during silence.
+    bool inputChanged = (std::abs(inL - lastInL) > 0.05f) || (std::abs(inR - lastInR) > 0.05f);
+    bool outputChanged = (std::abs(outL - lastOutL) > 0.05f) || (std::abs(outR - lastOutR) > 0.05f);
 
-    //// [CML:UI] Stereo TP Meter Peak Hold Decay Tick
+    // Update meter logic (must run for decay animation)
     inTpMeter.updatePeakHoldDecay();
     outTpMeter.updatePeakHoldDecay();
 
-    inTpMeter.repaint();
-    outTpMeter.repaint();
+    // Push values only on change
+    if (inputChanged)
+    {
+        inTpMeter.pushValueDbLR(inL, inR);
+        lastInL = inL;
+        lastInR = inR;
+    }
 
-    // Removed dynamic text updates for inTpLabel and outTpLabel
+    if (outputChanged)
+    {
+        outTpMeter.pushValueDbLR(outL, outR);
+        lastOutL = outL;
+        lastOutR = outR;
+    }
+
+    // Repaint only if new data came in OR if decay is active (level > -60)
+    // We check > -100 to allow the decay to finish falling to silence.
+    if (inputChanged || inL > -100.0f || inR > -100.0f)
+        inTpMeter.repaint();
+
+    if (outputChanged || outL > -100.0f || outR > -100.0f)
+        outTpMeter.repaint();
 }
 
 void CompassMasteringLimiterAudioProcessorEditor::paint(juce::Graphics &g)
 {
-    g.fillAll(juce::Colour(0xFF0D0D0D)); // Base Matte Black
+    // [Optimization]: Massive CPU saver.
+    // Instead of drawing the film grain, vignette, screws, wells, and text every frame,
+    // we buffer them into a single image in the LookAndFeel.
+    // This reduces the per-frame cost of the background from O(Complex) to O(1).
 
-    // --- Background Noise Texture (Refined: Cached Film Grain) ---
-    // Optimization: Draw cached noise instead of 3000 random rects per frame
     if (auto *lnf = dynamic_cast<CompassKnobLookAndFeel *>(knobLnf.get()))
     {
-        lnf->drawBackgroundNoise(g, getWidth(), getHeight());
+        // We pass a lambda that defines HOW to draw the background.
+        // This code only runs when the window is resized or first opened.
+        lnf->drawBufferedBackground(g, getWidth(), getHeight(), [this, lnf](juce::Graphics &gBuffer)
+                                    {
+            gBuffer.fillAll(juce::Colour(0xFF0D0D0D)); // Base Matte Black
+
+            // 1. Noise
+            lnf->drawBackgroundNoise(gBuffer, getWidth(), getHeight());
+
+            // 2. Vignette
+            {
+                juce::ColourGradient vig(juce::Colours::transparentBlack, getWidth() / 2.0f, getHeight() / 2.0f,
+                                         juce::Colours::black.withAlpha(0.6f), 0.0f, 0.0f, true);
+                gBuffer.setGradientFill(vig);
+                gBuffer.fillAll();
+            }
+
+            // 3. Screws
+            auto drawScrew = [&](int cx, int cy)
+            {
+                float r = 6.0f;
+                gBuffer.setGradientFill(juce::ColourGradient(juce::Colour(0xFF151515), cx - r, cy - r,
+                                                             juce::Colour(0xFF2A2A2A), cx + r, cy + r, true));
+                gBuffer.fillEllipse(cx - r, cy - r, r * 2, r * 2);
+                gBuffer.setColour(juce::Colours::black.withAlpha(0.8f));
+                gBuffer.drawEllipse(cx - r, cy - r, r * 2, r * 2, 1.0f);
+                gBuffer.setColour(juce::Colour(0xFF050505));
+                juce::Path p;
+                p.addStar(juce::Point<float>((float)cx, (float)cy), 6, r * 0.3f, r * 0.6f);
+                gBuffer.fillPath(p);
+            };
+            int m = 14;
+            drawScrew(m, m);
+            drawScrew(getWidth() - m, m);
+            drawScrew(m, getHeight() - m);
+            drawScrew(getWidth() - m, getHeight() - m);
+
+            // 4. Stamped Branding
+            gBuffer.setFont(15.0f);
+            gBuffer.setColour(juce::Colours::black.withAlpha(0.4f));
+            gBuffer.drawText("COMPASS", 35, 19, 100, 20, juce::Justification::left);
+            gBuffer.drawText("// LIMITER", 106, 19, 100, 20, juce::Justification::left);
+
+            gBuffer.setColour(juce::Colours::white.withAlpha(0.9f));
+            gBuffer.drawText("COMPASS", 34, 18, 100, 20, juce::Justification::left);
+            gBuffer.setColour(juce::Colour(0xFFE6A532));
+            gBuffer.drawText("// LIMITER", 105, 18, 100, 20, juce::Justification::left);
+
+            // 5. Meter Wells
+            auto drawMeterWell = [&](const juce::Rectangle<int> &bounds, bool isLeft)
+            {
+                auto well = bounds.toFloat().expanded(6.0f);
+                gBuffer.setColour(juce::Colour(0xFF131313));
+                gBuffer.fillRoundedRectangle(well, 6.0f);
+                gBuffer.setGradientFill(juce::ColourGradient(juce::Colours::black, well.getCentreX(), well.getY(),
+                                                       juce::Colour(0xFF0A0A0A), well.getCentreX(), well.getBottom(), false));
+                gBuffer.fillRoundedRectangle(well.reduced(2.0f), 4.0f);
+                gBuffer.setColour(juce::Colours::white.withAlpha(0.05f));
+                gBuffer.drawRoundedRectangle(well, 6.0f, 1.0f);
+
+                gBuffer.setColour(juce::Colours::white.withAlpha(0.1f));
+                float yStart = well.getY() + 4.0f;
+                float height = well.getHeight() - 8.0f;
+                float ticks[] = {0.0f, 0.25f, 0.5f, 0.75f};
+                for (float t : ticks)
+                {
+                    float y = yStart + (t * height);
+                    gBuffer.setColour(juce::Colours::black.withAlpha(0.5f));
+                    if (isLeft)
+                        gBuffer.drawHorizontalLine(y + 1.0f, well.getX() - 3.0f, well.getX());
+                    else
+                        gBuffer.drawHorizontalLine(y + 1.0f, well.getRight(), well.getRight() + 3.0f);
+
+                    gBuffer.setColour(juce::Colours::white.withAlpha(0.1f));
+                    if (isLeft)
+                        gBuffer.drawHorizontalLine(y, well.getX() - 3.0f, well.getX());
+                    else
+                        gBuffer.drawHorizontalLine(y, well.getRight(), well.getRight() + 3.0f);
+                }
+            };
+            drawMeterWell(inTpMeter.getBounds(), true);
+            drawMeterWell(outTpMeter.getBounds(), false);
+
+            // 6. GR Module Well
+            if (!grWellBounds.isEmpty())
+            {
+                auto well = grWellBounds.toFloat();
+                gBuffer.setColour(juce::Colour(0xFF131313));
+                gBuffer.fillRoundedRectangle(well.expanded(4.0f), 6.0f);
+                gBuffer.setGradientFill(juce::ColourGradient(juce::Colours::black, well.getCentreX(), well.getY(),
+                                                       juce::Colour(0xFF0A0A0A), well.getCentreX(), well.getBottom(), false));
+                gBuffer.fillRoundedRectangle(well, 4.0f);
+
+                float h = well.getHeight();
+                float y0 = well.getY();
+
+                gBuffer.setColour(juce::Colours::white.withAlpha(0.03f));
+                gBuffer.drawHorizontalLine(y0 + h * 0.50f, well.getX(), well.getRight());
+
+                gBuffer.setColour(juce::Colours::white.withAlpha(0.015f));
+                gBuffer.drawHorizontalLine(y0 + h * 0.25f, well.getX(), well.getRight());
+                gBuffer.drawHorizontalLine(y0 + h * 0.75f, well.getX(), well.getRight());
+
+                juce::ColourGradient innerShadow(juce::Colours::transparentBlack, well.getCentreX(), well.getBottom() - 20.0f,
+                                                 juce::Colours::black.withAlpha(0.8f), well.getCentreX(), well.getBottom(), false);
+                gBuffer.setGradientFill(innerShadow);
+                gBuffer.fillRoundedRectangle(well, 4.0f);
+
+                gBuffer.setGradientFill(juce::ColourGradient(juce::Colours::white.withAlpha(0.03f), well.getTopLeft(),
+                                                       juce::Colours::transparentBlack, well.getBottomRight(), false));
+                gBuffer.fillRoundedRectangle(well, 4.0f);
+
+                gBuffer.setColour(juce::Colours::white.withAlpha(0.15f));
+                gBuffer.drawHorizontalLine(well.getY() + 1.0f, well.getX() + 2.0f, well.getRight() - 2.0f);
+
+                gBuffer.setColour(juce::Colours::white.withAlpha(0.1f));
+                gBuffer.drawRoundedRectangle(well, 4.0f, 1.0f);
+            }
+
+            // 7. Value Etchings
+            auto drawEtch = [&](juce::Component &c)
+            {
+                auto b = c.getBounds().toFloat().reduced(6.0f, 0.0f);
+                gBuffer.setColour(juce::Colours::black.withAlpha(0.7f));
+                gBuffer.fillRoundedRectangle(b, 3.0f);
+                gBuffer.setColour(juce::Colours::white.withAlpha(0.08f));
+                gBuffer.drawRoundedRectangle(b, 3.0f, 1.0f);
+            };
+            drawEtch(trimValueLabel);
+            drawEtch(glueValueLabel);
+            drawEtch(ceilingValueLabel);
+            drawEtch(currentGrLabel); });
     }
 
-    // --- Vignette (Refined: Tighter falloff) ---
-    {
-        juce::ColourGradient vig(juce::Colours::transparentBlack, getWidth() / 2.0f, getHeight() / 2.0f,
-                                 juce::Colours::black.withAlpha(0.6f), 0.0f, 0.0f, true);
-        g.setGradientFill(vig);
-        g.fillAll();
-    }
-
-    // --- Panel Screws (Industrial Fasteners) ---
-    auto drawScrew = [&](int cx, int cy)
-    {
-        float r = 6.0f;
-        g.setGradientFill(juce::ColourGradient(juce::Colour(0xFF151515), cx - r, cy - r,
-                                               juce::Colour(0xFF2A2A2A), cx + r, cy + r, true));
-        g.fillEllipse(cx - r, cy - r, r * 2, r * 2);
-        g.setColour(juce::Colours::black.withAlpha(0.8f));
-        g.drawEllipse(cx - r, cy - r, r * 2, r * 2, 1.0f);
-        g.setColour(juce::Colour(0xFF050505));
-        juce::Path p;
-        p.addStar(juce::Point<float>((float)cx, (float)cy), 6, r * 0.3f, r * 0.6f);
-        g.fillPath(p);
-    };
-    int m = 14;
-    drawScrew(m, m);
-    drawScrew(getWidth() - m, m);
-    drawScrew(m, getHeight() - m);
-    drawScrew(getWidth() - m, getHeight() - m);
-
-    // --- Stamped Branding ---
-    g.setFont(15.0f);
-
-    // Shadow (Refined: Softened print thickness)
-    g.setColour(juce::Colours::black.withAlpha(0.4f)); // Reduced alpha for realism
-    g.drawText("COMPASS", 35, 19, 100, 20, juce::Justification::left);
-    g.drawText("// LIMITER", 106, 19, 100, 20, juce::Justification::left);
-
-    // Main text
-    g.setColour(juce::Colours::white.withAlpha(0.9f));
-    g.drawText("COMPASS", 34, 18, 100, 20, juce::Justification::left);
-    g.setColour(juce::Colour(0xFFE6A532));
-    g.drawText("// LIMITER", 105, 18, 100, 20, juce::Justification::left);
-
-    // --- Side Meter Housings ---
-    auto drawMeterWell = [&](const juce::Rectangle<int> &bounds, bool isLeft)
-    {
-        auto well = bounds.toFloat().expanded(6.0f);
-        g.setColour(juce::Colour(0xFF131313));
-        g.fillRoundedRectangle(well, 6.0f);
-        g.setGradientFill(juce::ColourGradient(juce::Colours::black, well.getCentreX(), well.getY(),
-                                               juce::Colour(0xFF0A0A0A), well.getCentreX(), well.getBottom(), false));
-        g.fillRoundedRectangle(well.reduced(2.0f), 4.0f);
-        g.setColour(juce::Colours::white.withAlpha(0.05f));
-        g.drawRoundedRectangle(well, 6.0f, 1.0f);
-
-        // Scale Markings
-        // [Pro Fix]: Etched look (Shorter, dimmer, drop shadow)
-        g.setColour(juce::Colours::white.withAlpha(0.1f));
-        float yStart = well.getY() + 4.0f;
-        float height = well.getHeight() - 8.0f;
-        float ticks[] = {0.0f, 0.25f, 0.5f, 0.75f};
-        for (float t : ticks)
-        {
-            float y = yStart + (t * height);
-
-            // Drop shadow for "etched" effect
-            g.setColour(juce::Colours::black.withAlpha(0.5f));
-            if (isLeft)
-                g.drawHorizontalLine(y + 1.0f, well.getX() - 3.0f, well.getX());
-            else
-                g.drawHorizontalLine(y + 1.0f, well.getRight(), well.getRight() + 3.0f);
-
-            // Highlight line
-            g.setColour(juce::Colours::white.withAlpha(0.1f));
-            if (isLeft)
-                g.drawHorizontalLine(y, well.getX() - 3.0f, well.getX());
-            else
-                g.drawHorizontalLine(y, well.getRight(), well.getRight() + 3.0f);
-        }
-    };
-    drawMeterWell(inTpMeter.getBounds(), true);
-    drawMeterWell(outTpMeter.getBounds(), false);
-
-    // --- The GR Module Well ---
-    if (!grWellBounds.isEmpty())
-    {
-        auto well = grWellBounds.toFloat();
-        g.setColour(juce::Colour(0xFF131313));
-        g.fillRoundedRectangle(well.expanded(4.0f), 6.0f);
-        g.setGradientFill(juce::ColourGradient(juce::Colours::black, well.getCentreX(), well.getY(),
-                                               juce::Colour(0xFF0A0A0A), well.getCentreX(), well.getBottom(), false));
-        g.fillRoundedRectangle(well, 4.0f);
-
-        // Grid Lines
-        float h = well.getHeight();
-        float y0 = well.getY();
-
-        // [Pro Fix]: Alternating rhythm for less visual noise
-        // 50% Line (Midpoint)
-        g.setColour(juce::Colours::white.withAlpha(0.03f)); // Slightly reduced from 0.04f
-        g.drawHorizontalLine(y0 + h * 0.50f, well.getX(), well.getRight());
-
-        // 25% and 75% Lines (Subtler)
-        g.setColour(juce::Colours::white.withAlpha(0.015f)); // Much dimmer
-        g.drawHorizontalLine(y0 + h * 0.25f, well.getX(), well.getRight());
-        g.drawHorizontalLine(y0 + h * 0.75f, well.getX(), well.getRight());
-
-        // [Pro Fix]: Inner Shadow at bottom for depth
-        juce::ColourGradient innerShadow(juce::Colours::transparentBlack, well.getCentreX(), well.getBottom() - 20.0f,
-                                         juce::Colours::black.withAlpha(0.8f), well.getCentreX(), well.getBottom(), false);
-        g.setGradientFill(innerShadow);
-        g.fillRoundedRectangle(well, 4.0f);
-
-        // Glass Sheen
-        g.setGradientFill(juce::ColourGradient(juce::Colours::white.withAlpha(0.03f), well.getTopLeft(),
-                                               juce::Colours::transparentBlack, well.getBottomRight(), false));
-        g.fillRoundedRectangle(well, 4.0f);
-
-        // [Pro Fix]: Top Edge Inner Highlight (Glass catch-light)
-        g.setColour(juce::Colours::white.withAlpha(0.15f));
-        g.drawHorizontalLine(well.getY() + 1.0f, well.getX() + 2.0f, well.getRight() - 2.0f);
-
-        // Frame
-        g.setColour(juce::Colours::white.withAlpha(0.1f));
-        g.drawRoundedRectangle(well, 4.0f, 1.0f);
-    }
-
-    // --- Headers ---
+    // --- Dynamic Headers (Drawn on top of cached background to preserve hover effects) ---
     auto drawHead = [&](juce::String text, juce::Slider &s)
     {
         auto b = s.getBounds().translated(0, -20);
@@ -648,20 +592,6 @@ void CompassMasteringLimiterAudioProcessorEditor::paint(juce::Graphics &g)
     drawHead("Glue", drive);
     drawHead("Ceiling", ceiling);
     drawHead("Trim", trim);
-
-    // --- Value Etchings ---
-    auto drawEtch = [&](juce::Component &c)
-    {
-        auto b = c.getBounds().toFloat().reduced(6.0f, 0.0f);
-        g.setColour(juce::Colours::black.withAlpha(0.7f));
-        g.fillRoundedRectangle(b, 3.0f);
-        g.setColour(juce::Colours::white.withAlpha(0.08f));
-        g.drawRoundedRectangle(b, 3.0f, 1.0f);
-    };
-    drawEtch(trimValueLabel);
-    drawEtch(glueValueLabel);
-    drawEtch(ceilingValueLabel);
-    drawEtch(currentGrLabel);
 }
 
 void CompassMasteringLimiterAudioProcessorEditor::resized()
@@ -684,9 +614,8 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
     const int labelHeight = 20;
 
     // Spacing & Offsets
-    //// [CML:UI] Value Label Vertical Spacing
-    const int labelOverlapStandard = 14; // Lower value labels away from knobs
-    const int labelOverlapTrim = 16;     // Slightly lower Trim label
+    const int labelOverlapStandard = 5; // Tucks label up towards knob
+    const int labelOverlapTrim = 8;     // Tucks label tighter for Trim
     const int bottomDeckYOffset = -10;  // Vertical shift for bottom row alignment
 
     auto r = getLocalBounds();
