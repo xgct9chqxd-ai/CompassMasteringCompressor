@@ -7,7 +7,8 @@
 static void setRotary(juce::Slider &s)
 {
     s.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
+    //// [CML:UI] Knob Value Entry — No Slider TextBox
+    s.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     s.setColour(juce::Slider::textBoxTextColourId, juce::Colours::transparentBlack);
     s.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     s.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
@@ -40,12 +41,7 @@ public:
         g.setColour(juce::Colours::white.withAlpha(0.08f));
         g.drawRoundedRectangle(r.translated(-0.5f, -0.5f), 4.0f, 1.0f);
 
-        // 4. Focus/Hover ring
-        if (box.hasKeyboardFocus(true))
-        {
-            g.setColour(juce::Colour(0xFFE6A532).withAlpha(0.5f));
-            g.drawRoundedRectangle(r, 4.0f, 1.0f);
-        }
+        //// [CML:UI] Combo Focus Ring Disabled
 
         // Chevron
         juce::Path p;
@@ -355,6 +351,64 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
     makeLabel(glueValueLabel, 14.0f, true);
     makeLabel(ceilingValueLabel, 14.0f, true);
 
+    //// [CML:UI] Inline Value Labels — Click To Edit
+    auto setupInlineValueLabel = [&] (juce::Label& l, const juce::String& paramID)
+    {
+        l.setInterceptsMouseClicks(true, true);
+        l.setEditable(false, true, false);
+
+        l.setColour(juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+        l.setColour(juce::Label::outlineColourId, juce::Colours::transparentBlack);
+        l.setColour(juce::Label::textWhenEditingColourId, juce::Colours::white.withAlpha(0.90f));
+
+        l.onEditorShow = [&l]
+        {
+            if (auto* ed = l.getCurrentTextEditor())
+            {
+                ed->setColour(juce::TextEditor::backgroundColourId, juce::Colours::transparentBlack);
+                ed->setColour(juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
+                ed->setColour(juce::TextEditor::shadowColourId, juce::Colours::transparentBlack);
+                ed->setJustification(juce::Justification::centred);
+                ed->selectAll();
+            }
+        };
+
+        l.onEditorHide = [this, &l, paramID]
+        {
+            auto raw = l.getText().trim();
+
+            // Keep only numeric-friendly characters
+            juce::String filtered;
+            filtered.preallocateBytes(raw.getNumBytesAsUTF8());
+            for (auto ch : raw)
+            {
+                if (juce::CharacterFunctions::isDigit(ch) || ch == '-' || ch == '+' || ch == '.' || ch == 'e' || ch == 'E')
+                    filtered += juce::String::charToString(ch);
+            }
+
+            auto* p = processor.getAPVTS().getParameter(paramID);
+            if (p == nullptr)
+                return;
+
+            const float v = (float) filtered.getDoubleValue();
+
+            if (auto* pf = dynamic_cast<juce::AudioParameterFloat*>(p))
+            {
+                const float clamped = juce::jlimit(pf->range.start, pf->range.end, v);
+                const float norm = pf->range.convertTo0to1(clamped);
+                pf->setValueNotifyingHost(norm);
+            }
+            else
+            {
+                p->setValueNotifyingHost(p->getValueForText(filtered));
+            }
+        };
+    };
+
+    setupInlineValueLabel(trimValueLabel, "trim");
+    setupInlineValueLabel(glueValueLabel, "drive");
+    setupInlineValueLabel(ceilingValueLabel, "ceiling");
+
     auto makeSurgical = [&](juce::Label &l)
     {
         l.setFont(10.0f);
@@ -362,10 +416,13 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
         l.setJustificationType(juce::Justification::centredLeft);
         addAndMakeVisible(l);
     };
+    //// [CML:UI] Center Side Meter Titles
     makeSurgical(inTpLabel);
+    inTpLabel.setJustificationType(juce::Justification::centred);
     inTpLabel.setText("IN", juce::dontSendNotification); // Static Label
 
     makeSurgical(outTpLabel);
+    outTpLabel.setJustificationType(juce::Justification::centred);
     outTpLabel.setText("OUT", juce::dontSendNotification); // Static Label
 
     makeSurgical(lufsSLabel);
@@ -413,9 +470,14 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
     }
 
     auto &vts = processor.getAPVTS();
-    trimValueLabel.setText(juce::String::formatted("%.1f dB", vts.getRawParameterValue("trim")->load()), juce::dontSendNotification);
-    glueValueLabel.setText(juce::String::formatted("%.1f %%", vts.getRawParameterValue("drive")->load()), juce::dontSendNotification);
-    ceilingValueLabel.setText(juce::String::formatted("%.1f dB", vts.getRawParameterValue("ceiling")->load()), juce::dontSendNotification);
+    if (! trimValueLabel.isBeingEdited())
+        trimValueLabel.setText(juce::String::formatted("%.1f dB", vts.getRawParameterValue("trim")->load()), juce::dontSendNotification);
+
+    if (! glueValueLabel.isBeingEdited())
+        glueValueLabel.setText(juce::String::formatted("%.1f %%", vts.getRawParameterValue("drive")->load()), juce::dontSendNotification);
+
+    if (! ceilingValueLabel.isBeingEdited())
+        ceilingValueLabel.setText(juce::String::formatted("%.1f dB", vts.getRawParameterValue("ceiling")->load()), juce::dontSendNotification);
 
     float inL, inR, outL, outR;
     // [Fix]: Unconditional update to ensure meters don't freeze if return check fails.
@@ -425,9 +487,13 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
     // Removed threshold check because it was preventing the internal peak-hold decay
     // animation from running when the audio level was stable.
     inTpMeter.pushValueDbLR(inL, inR);
-    inTpMeter.repaint();
-
     outTpMeter.pushValueDbLR(outL, outR);
+
+    //// [CML:UI] Stereo TP Meter Peak Hold Decay Tick
+    inTpMeter.updatePeakHoldDecay();
+    outTpMeter.updatePeakHoldDecay();
+
+    inTpMeter.repaint();
     outTpMeter.repaint();
 
     // Removed dynamic text updates for inTpLabel and outTpLabel
@@ -618,8 +684,9 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
     const int labelHeight = 20;
 
     // Spacing & Offsets
-    const int labelOverlapStandard = 5; // Tucks label up towards knob
-    const int labelOverlapTrim = 8;     // Tucks label tighter for Trim
+    //// [CML:UI] Value Label Vertical Spacing
+    const int labelOverlapStandard = 14; // Lower value labels away from knobs
+    const int labelOverlapTrim = 16;     // Slightly lower Trim label
     const int bottomDeckYOffset = -10;  // Vertical shift for bottom row alignment
 
     auto r = getLocalBounds();
@@ -635,8 +702,8 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
 
     // Labels relative to meters
     const int meterLabelGap = 8;
-    inTpLabel.setBounds(rLeft.getX(), meterY + meterHeight + meterLabelGap, sidePanelWidth, labelHeight);
-    outTpLabel.setBounds(rRight.getX(), meterY + meterHeight + meterLabelGap, sidePanelWidth, labelHeight);
+    inTpLabel.setBounds(inTpMeter.getX(), meterY + meterHeight + meterLabelGap, meterWidth, labelHeight);
+    outTpLabel.setBounds(outTpMeter.getX(), meterY + meterHeight + meterLabelGap, meterWidth, labelHeight);
 
     // --- Main Center ---
     auto main = r.reduced(mainPadding);
