@@ -214,7 +214,7 @@ public:
         auto drawLane = [&] (juce::Rectangle<float> lane, int ch)
         {
 
-            //// [CML:UI] Stereo TP Meter Palette — Disciplined Ramp
+            //// [CML:UI] Stereo TP Meter Palette — Threshold Mapped LEDs
             constexpr float kDesatMix01 = 0.45f; // 0=full hue, 1=grey
 
             constexpr float kGreyR  = 0.62f;
@@ -233,10 +233,18 @@ public:
             constexpr float kAmberG = 0.44f;
             constexpr float kAmberB = 0.18f;
 
+            constexpr float kRedR   = 0.90f;
+            constexpr float kRedG   = 0.22f;
+            constexpr float kRedB   = 0.12f;
+
+            constexpr float kGreenTopDb  = -6.0f;
+            constexpr float kYellowTopDb = 0.0f;
+
             const juce::Colour cGrey  = juce::Colour::fromFloatRGBA (kGreyR,  kGreyG,  kGreyB,  1.0f);
             const juce::Colour cGreen = juce::Colour::fromFloatRGBA (kGreenR, kGreenG, kGreenB, 1.0f);
             const juce::Colour cYell  = juce::Colour::fromFloatRGBA (kYellR,  kYellG,  kYellB,  1.0f);
             const juce::Colour cAmber = juce::Colour::fromFloatRGBA (kAmberR, kAmberG, kAmberB, 1.0f);
+            const juce::Colour cRed   = juce::Colour::fromFloatRGBA (kRedR,   kRedG,   kRedB,   1.0f);
 
             const float totalGapH = kSegGapPx * (float) (kSegN - 1);
             const float rawSegH   = (lane.getHeight() - totalGapH) / (float) kSegN;
@@ -254,13 +262,23 @@ public:
 
                 if (isActive)
                 {
-                    const float t = (kSegN > 1) ? ((float) idxFromBottom / (float) (kSegN - 1)) : 0.0f;
+                    const float segDb = kDbFloorDb + ((float) (idxFromBottom + 1) / (float) kSegN) * kDbSpanDb;
 
                     juce::Colour base;
-                    if (t < 0.50f)
-                        base = cGreen.interpolatedWith (cYell, t / 0.50f);
+                    if (segDb <= kGreenTopDb)
+                    {
+                        base = cGreen;
+                    }
+                    else if (segDb <= kYellowTopDb)
+                    {
+                        const float t01 = juce::jlimit (0.0f, 1.0f, (segDb - kGreenTopDb) / (kYellowTopDb - kGreenTopDb));
+                        base = cGreen.interpolatedWith (cYell, t01);
+                    }
                     else
-                        base = cYell.interpolatedWith (cAmber, (t - 0.50f) / 0.50f);
+                    {
+                        const float t01 = juce::jlimit (0.0f, 1.0f, (segDb - kYellowTopDb) / (kDbCeilDb - kYellowTopDb));
+                        base = cAmber.interpolatedWith (cRed, t01);
+                    }
 
                     base = base.interpolatedWith (cGrey, kDesatMix01);
                     g.setColour (base.withAlpha (kActiveAlpha01));

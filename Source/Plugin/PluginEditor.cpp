@@ -1,871 +1,690 @@
 #include "PluginEditor.h"
+#include <unordered_map>
+#include <random>
 
-static void setRotary (juce::Slider& s)
+//==============================================================================
+// HELPER: Sets up a rotary slider with "Stealth" text box
+static void setRotary(juce::Slider &s)
 {
-    s.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-    s.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 88, 20);
-
-    // Force visibility on dark UI (neutral, high-contrast; no "good/bad" color semantics)
-    s.setColour (juce::Slider::rotarySliderOutlineColourId, juce::Colours::white.withAlpha (0.35f));
-    s.setColour (juce::Slider::rotarySliderFillColourId,    juce::Colours::white.withAlpha (0.85f));
-    s.setColour (juce::Slider::thumbColourId,               juce::Colours::white.withAlpha (0.90f));
-
-    s.setColour (juce::Slider::textBoxTextColourId,         juce::Colours::white.withAlpha (0.90f));
-    s.setColour (juce::Slider::textBoxOutlineColourId,      juce::Colours::white.withAlpha (0.25f));
-    s.setColour (juce::Slider::textBoxBackgroundColourId,   juce::Colours::transparentBlack);
+    s.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
+    s.setColour(juce::Slider::textBoxTextColourId, juce::Colours::transparentBlack);
+    s.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+    s.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
 }
 
+//==============================================================================
+// LOOK & FEEL: "Compass" Industrial Design
 class CompassKnobLookAndFeel final : public juce::LookAndFeel_V4
 {
 public:
-    void drawRotarySlider (juce::Graphics& g,
-                           int x, int y, int width, int height,
-                           float sliderPosProportional,
-                           float rotaryStartAngle,
-                           float rotaryEndAngle,
-                           juce::Slider& slider) override
+    CompassKnobLookAndFeel()
     {
-        const auto knobBounds = juce::Rectangle<float> ((float) x, (float) y, (float) width, (float) height);
-        drawMachinedKnob (g, knobBounds, sliderPosProportional, rotaryStartAngle, rotaryEndAngle, slider);
+        setDefaultSansSerifTypefaceName("Inter");
     }
 
-private:
-    void drawMachinedKnob (juce::Graphics& g,
-                           juce::Rectangle<float> knobBounds,
-                           float sliderPosProportional,
-                           float rotaryStartAngle,
-                           float rotaryEndAngle,
-                           juce::Slider& slider)
+    // --- Custom Controls ---
+    void drawComboBox(juce::Graphics &g, int width, int height, bool, int, int, int, int, juce::ComboBox &box) override
     {
-        const float cx = knobBounds.getCentreX();
-        const float cy = knobBounds.getCentreY();
-        const float r  = juce::jmin (knobBounds.getWidth(), knobBounds.getHeight()) * 0.5f;
+        auto r = juce::Rectangle<float>((float)width, (float)height);
 
-        const auto boundsF = knobBounds;
-        const float radiusBase = boundsF.getWidth() * 0.5f;
+        // 1. Recessed Background
+        g.setColour(juce::Colour(0xFF0A0A0A));
+        g.fillRoundedRectangle(r, 4.0f);
 
-        const float clipInset    = juce::jlimit (0.0f, radiusBase * 0.10f, radiusBase * 0.06f);
-        const float shadowDy     = juce::jlimit (0.0f, radiusBase * 0.10f, radiusBase * 0.03f);
-        const float faceInset    = juce::jlimit (0.0f, radiusBase * 0.10f, radiusBase * 0.06f);
-        const float aoInset      = juce::jlimit (0.0f, radiusBase * 0.10f, radiusBase * 0.03f);
-        const float rimThickness = juce::jlimit (radiusBase * 0.10f, radiusBase * 0.15f, radiusBase * 0.12f);
+        // 2. Inner Shadow
+        g.setColour(juce::Colours::black.withAlpha(0.8f));
+        g.drawRoundedRectangle(r.translated(0.5f, 0.5f), 4.0f, 1.0f);
 
-        const auto outer      = boundsF.reduced (clipInset);
-        const auto shadowRect = outer.translated (0.0f, shadowDy);
-        const auto rimOuter   = outer;
-        const auto rimInner   = rimOuter.reduced (rimThickness);
-        const auto face       = rimInner.reduced (faceInset);
-        const auto aoRing     = rimInner.reduced (aoInset);
+        // 3. Bottom Highlight
+        g.setColour(juce::Colours::white.withAlpha(0.08f));
+        g.drawRoundedRectangle(r.translated(-0.5f, -0.5f), 4.0f, 1.0f);
 
-        const auto center = face.getCentre();
-        const float radius = face.getWidth() * 0.5f;
-
-        // Step 3A — Contact shadow (grounds knob to panel). Draw beneath knob layers.
+        // 4. Focus/Hover ring
+        if (box.hasKeyboardFocus(true))
         {
-            const juce::Colour baseColour = juce::Colours::black;
+            g.setColour(juce::Colour(0xFFE6A532).withAlpha(0.5f));
+            g.drawRoundedRectangle(r, 4.0f, 1.0f);
+        }
 
-            const float shadowExpandStep = juce::jlimit (0.0f, radius * 0.08f, radius * 0.03f);
+        // Chevron
+        juce::Path p;
+        auto center = r.removeFromRight(20.0f).getCentre();
+        p.addTriangle(center.x - 3, center.y - 2, center.x + 3, center.y - 2, center.x, center.y + 3);
+        g.setColour(juce::Colours::white.withAlpha(0.4f));
+        g.fillPath(p);
+    }
 
-            constexpr float a0 = 0.20f;
-            constexpr float a1 = 0.10f;
-            constexpr float a2 = 0.05f;
+    void drawPopupMenuBackground(juce::Graphics &g, int width, int height) override
+    {
+        g.fillAll(juce::Colour(0xFF0F0F0F));
+        g.setColour(juce::Colours::white.withAlpha(0.1f));
+        g.drawRect(0, 0, width, height);
+    }
 
-            for (int i = 0; i < 3; ++i)
+    void drawButtonBackground(juce::Graphics &g, juce::Button &button, const juce::Colour &, bool, bool) override
+    {
+        auto r = button.getLocalBounds().toFloat();
+        bool on = button.getToggleState();
+        bool down = button.isMouseButtonDown();
+
+        // [Pro Fix]: Unified "Recessed" styling (matches ComboBox)
+
+        // 1. Recessed Base (Same as ComboBox)
+        g.setColour(juce::Colour(0xFF0A0A0A));
+        g.fillRoundedRectangle(r, 4.0f);
+
+        // 2. Inner Shadow
+        g.setColour(juce::Colours::black.withAlpha(0.8f));
+        g.drawRoundedRectangle(r.translated(0.5f, 0.5f), 4.0f, 1.0f);
+
+        // 3. Bottom Highlight
+        g.setColour(juce::Colours::white.withAlpha(0.08f));
+        g.drawRoundedRectangle(r.translated(-0.5f, -0.5f), 4.0f, 1.0f);
+
+        // 4. Active State (Inner glow instead of flat fill)
+        if (on || down)
+        {
+            g.setColour(juce::Colour(0xFFE6A532).withAlpha(0.15f));
+            g.fillRoundedRectangle(r.reduced(2.0f), 3.0f);
+
+            // Subtle active border
+            g.setColour(juce::Colour(0xFFE6A532).withAlpha(0.3f));
+            g.drawRoundedRectangle(r, 4.0f, 1.0f);
+        }
+    }
+
+    void drawButtonText(juce::Graphics &g, juce::TextButton &button, bool, bool) override
+    {
+        g.setFont(12.0f);
+        bool on = button.getToggleState();
+        g.setColour(on ? juce::Colour(0xFFE6A532) : juce::Colours::white.withAlpha(0.4f));
+        g.drawText(button.getButtonText(), button.getLocalBounds(), juce::Justification::centred, false);
+    }
+
+    // --- CPU Optimization: Cache the noise texture ---
+    juce::Image noiseCache;
+
+    void drawBackgroundNoise(juce::Graphics &g, int w, int h)
+    {
+        // Re-generate only if size changes (or first run)
+        if (noiseCache.isNull() || noiseCache.getWidth() != w || noiseCache.getHeight() != h)
+        {
+            noiseCache = juce::Image(juce::Image::ARGB, w, h, true);
+            juce::Graphics g2(noiseCache);
+
+            juce::Random rng(1234); // Fixed seed for consistent pattern
+            for (int i = 0; i < 3000; ++i)
             {
-                const float ai = (i == 0 ? a0 : (i == 1 ? a1 : a2));
-                const float e  = shadowExpandStep * (float) i;
+                float x = rng.nextFloat() * w;
+                float y = rng.nextFloat() * h;
 
-                auto rShadow = shadowRect.expanded (e, e);
+                // Mix light and dark specs for depth
+                if (rng.nextBool())
+                    g2.setColour(juce::Colours::white.withAlpha(0.015f));
+                else
+                    g2.setColour(juce::Colours::black.withAlpha(0.04f));
 
-                juce::ColourGradient grad (baseColour.withAlpha (ai),
-                                          rShadow.getCentreX(), rShadow.getBottom(),
-                                          baseColour.withAlpha (0.0f),
-                                          rShadow.getCentreX(), rShadow.getY(),
-                                          false);
-
-                g.setGradientFill (grad);
-                g.fillEllipse (rShadow);
+                g2.fillRect(x, y, 1.0f, 1.0f);
             }
         }
 
-        // Step 3B — Ambient Occlusion ring (knob meets panel). Draw beneath rim/face layers.
+        // Zero-cost blit
+        g.drawImageAt(noiseCache, 0, 0);
+    }
+
+    // --- CPU Optimization: Cache the static knob body ---
+    // [Pro Fix]: Use unordered_map for O(1) lookup speed instead of logN
+    std::unordered_map<int, juce::Image> knobCache;
+
+    void drawRotarySlider(juce::Graphics &g, int x, int y, int width, int height, float pos, float startAngle, float endAngle, juce::Slider &slider) override
+    {
+        // 1. Image Caching
+        const int sizeKey = (width << 16) | height;
+        auto &bgImage = knobCache[sizeKey];
+
+        // Draw Cached Background first
+        if (bgImage.isNull() || bgImage.getWidth() != width || bgImage.getHeight() != height)
         {
-            const juce::Colour base = juce::Colours::black;
+            bgImage = juce::Image(juce::Image::ARGB, width, height, true);
+            juce::Graphics g2(bgImage);
 
-            // Donut ring: rimOuter minus rimInner (even-odd fill).
-            juce::Path ringPath;
-            ringPath.addEllipse (rimOuter);
-            ringPath.addEllipse (rimInner);
-            ringPath.setUsingNonZeroWinding (false);
+            auto bounds = juce::Rectangle<float>((float)width, (float)height);
+            float side = juce::jmin((float)width, (float)height);
+            auto center = bounds.getCentre();
+            float r = side * 0.5f;
 
-            constexpr float aoAlphaBottom = 0.10f;
-            constexpr float aoAlphaTop    = 0.00f;
-
-            juce::ColourGradient aoGrad (base.withAlpha (aoAlphaBottom),
-                                         rimOuter.getCentreX(), rimOuter.getBottom(),
-                                         base.withAlpha (aoAlphaTop),
-                                         rimOuter.getCentreX(), rimOuter.getY(),
-                                         false);
-
-            g.setGradientFill (aoGrad);
-            g.fillPath (ringPath);
-
-            // Mild inner-edge emphasis band near rimInner.
-            const float innerEmphasis = juce::jlimit (0.0f, radius * 0.06f, radius * 0.02f);
-
-            const float minDim = juce::jmin (rimInner.getWidth(), rimInner.getHeight());
-            const float safeE  = juce::jlimit (0.0f, minDim * 0.25f, innerEmphasis);
-
-            auto innerBandOuter = rimInner.expanded (safeE, safeE);
-            auto innerBandInner = rimInner.reduced  (safeE);
-
-            juce::Path innerBand;
-            innerBand.addEllipse (innerBandOuter);
-            innerBand.addEllipse (innerBandInner);
-            innerBand.setUsingNonZeroWinding (false);
-
-            constexpr float innerAlphaBottom = 0.08f;
-
-            juce::ColourGradient innerGrad (base.withAlpha (innerAlphaBottom),
-                                            rimOuter.getCentreX(), rimOuter.getBottom(),
-                                            base.withAlpha (0.0f),
-                                            rimOuter.getCentreX(), rimOuter.getY(),
-                                            false);
-
-            g.setGradientFill (innerGrad);
-            g.fillPath (innerBand);
-        }
-
-        const juce::Colour cDarkMid (0xFF2A2A2A);
-        const juce::Colour cDark    (0xFF111111);
-        const juce::Colour cBlack   (0xFF000000);
-        const juce::Colour cRim     (0xFF333333);
-
-        const float ro = r - 0.5f;
-
-
-        // Step 4A — Machined rim: Rim base fill (dark neutral base). Draw beneath rim highlights and face.
-        {
-            juce::Path rimPath;
-            rimPath.addEllipse (rimOuter);
-            rimPath.addEllipse (rimInner);
-            rimPath.setUsingNonZeroWinding (false);  // even-odd fill to subtract inner
-
-            const juce::Colour rimBase = juce::Colour::fromFloatRGBA (0.12f, 0.12f, 0.12f, 1.0f);
-            g.setColour (rimBase);
-            g.fillPath (rimPath);
-        }
-
-        // Step 4B — Machined rim: Rim bevel gradient (top-left brighter, bottom-right darker).
-        {
-            juce::Path rimPath;
-            rimPath.addEllipse (rimOuter);
-            rimPath.addEllipse (rimInner);
-            rimPath.setUsingNonZeroWinding (false);  // even-odd fill to subtract inner
-
-            const float off = radius * 0.25f;
-            const juce::Point<float> pLight = center.translated (-off, -off);
-            const juce::Point<float> pDark  = center.translated ( off,  off);
-
-            const juce::Colour light = juce::Colour::fromFloatRGBA (0.22f, 0.22f, 0.22f, 1.0f);
-            const juce::Colour dark  = juce::Colour::fromFloatRGBA (0.08f, 0.08f, 0.08f, 1.0f);
-
-            juce::ColourGradient grad (light, pLight.x, pLight.y,
-                                      dark,  pDark.x,  pDark.y,
-                                      true);
-
-            g.setGradientFill (grad);
-            g.fillPath (rimPath);
-        }
-
-        // Step 4C — Machined rim: Rim catch light (thin highlight arc on rimOuter).
-        {
-            const float strokeW = juce::jlimit (radius * 0.01f, radius * 0.03f, radius * 0.02f);
-
-            const float startRad = juce::degreesToRadians (300.0f);
-            const float endRad   = juce::degreesToRadians ( 60.0f);
-
-            juce::Path catchPath;
-            catchPath.addArc (rimOuter.getX(), rimOuter.getY(),
-                              rimOuter.getWidth(), rimOuter.getHeight(),
-                              startRad, endRad, true);
-
-            const juce::Colour catchCol = juce::Colour::fromFloatRGBA (0.85f, 0.82f, 0.78f, 0.18f);
-            g.setColour (catchCol);
-            g.strokePath (catchPath, juce::PathStrokeType (strokeW,
-                                                          juce::PathStrokeType::curved,
-                                                          juce::PathStrokeType::rounded));
-        }
-
-        // Step 5A — Face dome: base fill (solid).
-        {
-            const juce::Colour faceBase = juce::Colour::fromFloatRGBA (0.16f, 0.16f, 0.16f, 1.0f);
-            g.setColour (faceBase);
-            g.fillEllipse (face);
-        }
-
-        // Step 5B — Face dome: subtle dome gradient (no hotspot).
-        {
-            const juce::Colour domeCenter = juce::Colour::fromFloatRGBA (0.19f, 0.19f, 0.19f, 1.0f);
-            const juce::Colour domeEdge   = juce::Colour::fromFloatRGBA (0.16f, 0.16f, 0.16f, 1.0f);
-
-            const float off = radius * 0.10f;
-            const juce::Point<float> domeP = center.translated (-off, -off);
-
-            juce::ColourGradient domeGrad (domeCenter, domeP.x, domeP.y,
-                                           domeEdge,   center.x, center.y,
-                                           true);
-
-            g.setGradientFill (domeGrad);
-            g.fillEllipse (face);
-        }
-
-        // Knob fill (radial gradient)
-        if (ro > 0.0f)
-        {
-            const float gx = cx - 0.1f * r;
-            const float gy = cy - 0.1f * r;
-
-            juce::ColourGradient grad (cDarkMid, gx, gy, cBlack, cx, cy, true);
-            grad.addColour (0.70, cDark);
-
-            g.setGradientFill (grad);
-            g.fillEllipse (cx - ro, cy - ro, 2.0f * ro, 2.0f * ro);
-        }
-
-        // Edge ticks (static)
-        if (r > 0.0f)
-        {
-            constexpr int   tickCount = 48;
-            constexpr float tickLen   = 8.0f;
-            constexpr float tickW     = 1.0f;
-            constexpr float tickAlpha = 0.55f;
-
-            const float tickOuter = r - 2.0f;
-            const float tickInner = tickOuter - tickLen;
-
-            if (tickInner > 0.0f && tickOuter > tickInner)
+            // --- A. Recessed Well ---
             {
-                g.setColour (juce::Colours::white.withAlpha (tickAlpha));
+                float wellR = r * 1.15f;
+                juce::ColourGradient well(juce::Colours::black.withAlpha(0.95f), center.x, center.y,
+                                          juce::Colours::transparentBlack, center.x, center.y + wellR, true);
+                well.addColour(r / wellR, juce::Colours::black.withAlpha(0.95f));
+                g2.setGradientFill(well);
+                g2.fillEllipse(center.x - wellR, center.y - wellR, wellR * 2, wellR * 2);
+            }
 
-                const float startA = rotaryStartAngle;
-                const float endA   = rotaryEndAngle;
-                const float rotA   = juce::MathConstants<float>::halfPi + juce::MathConstants<float>::pi; // 90 + 180 degrees
+            // --- B. Scale Markings (Major/Minor Ticks) ---
+            {
+                int numTicks = 24;
+                float tickR_Inner = r * 1.18f;
+                float tickR_Outer_Major = r * 1.28f;
+                float tickR_Outer_Minor = r * 1.23f;
 
-                for (int i = 0; i < tickCount; ++i)
+                for (int i = 0; i <= numTicks; ++i)
                 {
-                    const float t = (float) i / (float) (tickCount - 1);
-                    const float aBase = startA + t * (endA - startA);
-                    const float a = aBase + rotA;
+                    bool isMajor = (i % 4 == 0); // Every 4th tick is Major
+                    float angle = startAngle + (float)i / (float)numTicks * (endAngle - startAngle);
 
-                    const float dx = std::cos (a);
-                    const float dy = std::sin (a);
+                    float outerR = isMajor ? tickR_Outer_Major : tickR_Outer_Minor;
+                    g2.setColour(juce::Colours::white.withAlpha(isMajor ? 0.25f : 0.1f)); // Brighter major ticks
 
-                    const float x1 = cx + tickInner * dx;
-                    const float y1 = cy + tickInner * dy;
-                    const float x2 = cx + tickOuter * dx;
-                    const float y2 = cy + tickOuter * dy;
-
-                    g.drawLine (x1, y1, x2, y2, tickW);
+                    juce::Line<float> tick(center.getPointOnCircumference(tickR_Inner, angle),
+                                           center.getPointOnCircumference(outerR, angle));
+                    g2.drawLine(tick, isMajor ? 1.5f : 1.0f);
                 }
             }
-        }
 
-        // Subtle rim stroke
-        if (ro > 0.0f)
-        {
-            g.setColour (cRim);
-            g.drawEllipse (cx - ro, cy - ro, 2.0f * ro, 2.0f * ro, 1.0f);
-        }
+            // --- C. Main Body ---
+            float bodyR = r * 0.85f;
+            g2.setGradientFill(juce::ColourGradient(juce::Colour(0xFF2B2B2B), center.x - bodyR, center.y - bodyR,
+                                                    juce::Colour(0xFF050505), center.x + bodyR, center.y + bodyR, true));
+            g2.fillEllipse(center.x - bodyR, center.y - bodyR, bodyR * 2, bodyR * 2);
 
-        // Inner shadow (top bias)
-        {
-            const float rr = r - 2.0f;
-            if (rr > 0.0f)
+            // --- D. Chamfer Ring ---
             {
-                juce::ColourGradient sh (juce::Colours::black.withAlpha (0.80f),
-                                        cx, cy - rr,
-                                        juce::Colours::transparentBlack,
-                                        cx, cy,
-                                        false);
-                g.setGradientFill (sh);
-                g.fillEllipse (cx - rr, cy - rr, 2.0f * rr, 2.0f * rr);
+                juce::ColourGradient rimGrad(juce::Colours::white.withAlpha(0.3f), center.x - bodyR, center.y - bodyR,
+                                             juce::Colours::black, center.x + bodyR, center.y + bodyR, true);
+                g2.setGradientFill(rimGrad);
+                g2.drawEllipse(center.x - bodyR, center.y - bodyR, bodyR * 2, bodyR * 2, 2.0f);
+            }
+
+            // --- E. Face ---
+            float faceR = bodyR * 0.9f;
+            g2.setGradientFill(juce::ColourGradient(juce::Colour(0xFF222222), center.x, center.y - faceR,
+                                                    juce::Colour(0xFF0A0A0A), center.x, center.y + faceR, false));
+            g2.fillEllipse(center.x - faceR, center.y - faceR, faceR * 2, faceR * 2);
+        }
+
+        g.drawImageAt(bgImage, x, y);
+
+        // 2. Dynamic Elements (Ticks + Pointer)
+        auto bounds = juce::Rectangle<float>((float)x, (float)y, (float)width, (float)height);
+        float side = juce::jmin((float)width, (float)height);
+        auto center = bounds.getCentre();
+        float r = side * 0.5f;
+        float bodyR = r * 0.85f;
+        float faceR = bodyR * 0.9f;
+
+        float angle = startAngle + pos * (endAngle - startAngle);
+
+        // --- B. Dynamic Scale Markings (Ghost Ticks) ---
+        // Moved out of cache so we can light up the active tick
+        {
+            int numTicks = 24;
+            float tickR_Inner = r * 1.18f;
+            float tickR_Outer_Major = r * 1.28f;
+            float tickR_Outer_Minor = r * 1.23f;
+            const float twoPi = 2.0f * juce::MathConstants<float>::pi;
+
+            for (int i = 0; i <= numTicks; ++i)
+            {
+                float tickAngle = startAngle + (float)i / (float)numTicks * (endAngle - startAngle);
+                bool isMajor = (i % 4 == 0);
+
+                // [Pro Fix]: Compute wrapped angular distance to handle wrap-around correctly
+                float diff = tickAngle - angle;
+
+                // Normalize diff to -PI...PI range
+                while (diff <= -juce::MathConstants<float>::pi)
+                    diff += twoPi;
+                while (diff > juce::MathConstants<float>::pi)
+                    diff -= twoPi;
+
+                float dist = std::abs(diff);
+                bool isClose = dist < 0.15f;
+
+                float outerR = isMajor ? tickR_Outer_Major : tickR_Outer_Minor;
+
+                // Base alpha + proximity boost
+                float alpha = isMajor ? 0.25f : 0.1f;
+                if (isClose)
+                    alpha += 0.3f; // Significant boost for "active" tick
+
+                g.setColour(juce::Colours::white.withAlpha(alpha));
+
+                juce::Line<float> tick(center.getPointOnCircumference(tickR_Inner, tickAngle),
+                                       center.getPointOnCircumference(outerR, tickAngle));
+                g.drawLine(tick, isMajor ? 1.5f : 1.0f);
             }
         }
 
-        // Faint highlight (bottom bias)
+        // --- Pointer ---
+        juce::Path p;
+        float ptrW = 3.5f;
+        float ptrLen = faceR * 0.6f;
+        p.addRoundedRectangle(-ptrW * 0.5f, -faceR + 6.0f, ptrW, ptrLen, 1.0f);
+
+        auto xf = juce::AffineTransform::rotation(angle).translated(center);
+        bool active = slider.isMouseOverOrDragging();
+
+        // [Refinement]: Unify Pointer Color - All white now
+        juce::Colour activeColor = juce::Colours::white;
+
+        // Glow if active
+        if (active)
         {
-            const float rr = r - 2.0f;
-            if (rr > 0.0f)
-            {
-                juce::ColourGradient hi (juce::Colours::transparentWhite,
-                                        cx, cy,
-                                        juce::Colours::white.withAlpha (0.05f),
-                                        cx, cy + rr,
-                                        false);
-                g.setGradientFill (hi);
-                g.fillEllipse (cx - rr, cy - rr, 2.0f * rr, 2.0f * rr);
-            }
+            g.setColour(activeColor.withAlpha(0.25f));
+            g.strokePath(p, juce::PathStrokeType(5.0f), xf);
         }
-
-        // Indicator (line) — replaces JUCE dot/pointer; mapping unchanged.
-        const float angle = rotaryStartAngle
-                          + sliderPosProportional * (rotaryEndAngle - rotaryStartAngle);
-
-        const float lineW     = 3.0f;
-        const float lineLen   = 0.9f * r;       // 45% of diameter
-        const float lineInset = 0.10f * r;      // gap from center
-        const float lineR     = 2.0f;
-
-        // Subtle glow (no blur): one outer pass, then main pass.
-        {
-            juce::Path glow;
-            glow.addRoundedRectangle (-0.5f * (lineW + 2.0f),
-                                      -(lineInset + lineLen),
-                                      (lineW + 2.0f),
-                                      lineLen,
-                                      lineR + 1.0f);
-
-            g.setColour (juce::Colours::white.withAlpha (0.10f));
-            g.fillPath (glow, juce::AffineTransform::rotation (angle).translated (cx, cy));
-        }
-
-        {
-            juce::Path line;
-            line.addRoundedRectangle (-0.5f * lineW,
-                                      -(lineInset + lineLen),
-                                      lineW,
-                                      lineLen,
-                                      lineR);
-
-            auto col = slider.findColour (juce::Slider::thumbColourId);
-            g.setColour (col.isTransparent() ? juce::Colours::white.withAlpha (0.90f) : col);
-            g.fillPath (line, juce::AffineTransform::rotation (angle).translated (cx, cy));
-        }
+        g.setColour(active ? activeColor : juce::Colours::black.withAlpha(0.6f));
+        g.fillPath(p, xf);
     }
 };
 
-CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcessorEditor (CompassMasteringLimiterAudioProcessor& p)
-: juce::AudioProcessorEditor (&p), processor (p)
-{
-    setSize (900, 420);
+//==============================================================================
+// EDITOR
+//==============================================================================
 
+CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcessorEditor(CompassMasteringLimiterAudioProcessor &p)
+    : juce::AudioProcessorEditor(&p), processor(p)
+{
+    setSize(900, 500);
     knobLnf = std::make_unique<CompassKnobLookAndFeel>();
 
-    setRotary (drive);
-    drive.setLookAndFeel (knobLnf.get());
-    addAndMakeVisible (drive);
-
-    setRotary (ceiling);
-    ceiling.setLookAndFeel (knobLnf.get());
-    addAndMakeVisible (ceiling);
-    //// [CML:UI] Bias readout — fixed identity
-    // No interactive component. Slot reserved for static paint only.
-
-    //// [CML:UI] Stereo Link switch — OFF discomfort
-    constexpr float kStereoLinkOffAlpha = 0.47f;
-    auto updateStereoLinkUi = [this]()
+    // --- Controls ---
+    auto setupKnob = [&](juce::Slider &s, const juce::String &name)
     {
-        const bool on = stereoLink.getToggleState();
-        stereoLink.setButtonText (on ? "ON" : "OFF");
-        stereoLink.setAlpha (on ? 1.0f : kStereoLinkOffAlpha); // OFF de-emphasized
+        s.setName(name); // Crucial for Color Law
+        setRotary(s);
+        s.setLookAndFeel(knobLnf.get());
+        addAndMakeVisible(s);
+    };
+    setupKnob(drive, "Drive");
+    setupKnob(ceiling, "Ceiling");
+    setupKnob(trim, "Trim");
+
+    stereoLink.setButtonText("LINK");
+    stereoLink.setClickingTogglesState(true);
+    stereoLink.setLookAndFeel(knobLnf.get());
+    addAndMakeVisible(stereoLink);
+
+    auto setupCombo = [&](juce::ComboBox &c)
+    {
+        c.setJustificationType(juce::Justification::centred);
+        c.setLookAndFeel(knobLnf.get());
+        addAndMakeVisible(c);
+
+        // [Fix]: Clear focus on selection to remove persistent orange halo
+        c.onChange = [this]
+        { grabKeyboardFocus(); };
+    };
+    setupCombo(adaptiveBias);
+    adaptiveBias.addItem("Transparent", 1);
+    adaptiveBias.addItem("Balanced", 2);
+    adaptiveBias.addItem("Aggressive", 3);
+    adaptiveBias.setSelectedId(3, juce::dontSendNotification);
+
+    setupCombo(oversamplingMin);
+    oversamplingMin.addItem("2x", 1);
+    oversamplingMin.addItem("4x", 2);
+    oversamplingMin.addItem("8x", 3);
+
+    // --- Meters ---
+    addAndMakeVisible(grMeter);
+    grMeter.setInterceptsMouseClicks(false, false);
+    addAndMakeVisible(inTpMeter);
+    addAndMakeVisible(outTpMeter);
+
+    // --- Labels ---
+    auto makeLabel = [&](juce::Label &l, float size, bool bold)
+    {
+        l.setFont(juce::Font(size, bold ? juce::Font::bold : juce::Font::plain));
+        l.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
+        l.setJustificationType(juce::Justification::centred);
+        l.setInterceptsMouseClicks(false, false);
+        addAndMakeVisible(l);
     };
 
-    stereoLink.setClickingTogglesState (true);
-    stereoLink.setTriggeredOnMouseDown (true);
-    stereoLink.onClick = updateStereoLinkUi;
+    makeLabel(grTitleLabel, 22.0f, true); // Larger title for the module
+    grTitleLabel.setText("GAIN REDUCTION", juce::dontSendNotification);
+    grTitleLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.2f));
 
-    stereoLink.setColour (juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
-    stereoLink.setColour (juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
-    stereoLink.setColour (juce::TextButton::textColourOffId, juce::Colours::white.withAlpha (0.80f));
-    stereoLink.setColour (juce::TextButton::textColourOnId,  juce::Colours::white.withAlpha (0.90f));
+    makeLabel(currentGrLabel, 18.0f, true);
+    makeLabel(trimValueLabel, 14.0f, true);
+    makeLabel(glueValueLabel, 14.0f, true);
+    makeLabel(ceilingValueLabel, 14.0f, true);
 
-    addAndMakeVisible (stereoLink);
-
-    oversamplingMin.addItem ("2x", 1);
-    oversamplingMin.addItem ("4x", 2);
-    oversamplingMin.addItem ("8x", 3);
-    addAndMakeVisible (oversamplingMin);
-
-    addAndMakeVisible (grMeter);
-    grMeter.setInterceptsMouseClicks (false, false);
-    grMeter.toBack();
-    grMeter.setAlpha (1.0f);
-    grMeter.setEnabled (true);
-
-    //// [CML:UI] GR title label — display-only header
-    grTitleLabel.setText ("GR", juce::dontSendNotification);
-    grTitleLabel.setJustificationType (juce::Justification::centred);
-    grTitleLabel.setFont (juce::Font (34.0f, juce::Font::bold));
-    grTitleLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.88f));
-    grTitleLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
-    grTitleLabel.setInterceptsMouseClicks (false, false);
-    addAndMakeVisible (grTitleLabel);
-
-    currentGrLabel.setJustificationType (juce::Justification::centred);
-    currentGrLabel.setFont (juce::Font (22.0f, juce::Font::bold));
-    currentGrLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.88f));
-    currentGrLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
-    currentGrLabel.setInterceptsMouseClicks (false, false);
-    currentGrLabel.setText ("0.0 dB", juce::dontSendNotification);
-    addAndMakeVisible (currentGrLabel);
-
-    //// [CML:UI] GR hidden components — paint-owned render
-    currentGrLabel.setVisible (false);
-    grTitleLabel.setVisible (false);
-
-    inTpLabel.setJustificationType (juce::Justification::centredLeft);
-    inTpLabel.setFont (juce::Font (13.0f));
-    inTpLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
-    inTpLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
-    inTpLabel.setInterceptsMouseClicks (false, false);
-    inTpLabel.setText ("IN TP: -120.0 dBTP", juce::dontSendNotification);
-    addAndMakeVisible (inTpLabel);
-
-    outTpLabel.setJustificationType (juce::Justification::centredLeft);
-    outTpLabel.setFont (juce::Font (13.0f));
-    outTpLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
-    outTpLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
-    outTpLabel.setInterceptsMouseClicks (false, false);
-    outTpLabel.setText ("OUT TP: -120.0 dBTP", juce::dontSendNotification);
-    addAndMakeVisible (outTpLabel);
-
-    lufsSLabel.setJustificationType (juce::Justification::centredLeft);
-    lufsSLabel.setFont (juce::Font (13.0f));
-    lufsSLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
-    lufsSLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
-    lufsSLabel.setInterceptsMouseClicks (false, false);
-    lufsSLabel.setText ("LUFS-S: -120.0", juce::dontSendNotification);
-    addAndMakeVisible (lufsSLabel);
-
-    lufsILabel.setJustificationType (juce::Justification::centredLeft);
-    lufsILabel.setFont (juce::Font (13.0f));
-    lufsILabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
-    lufsILabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
-    lufsILabel.setInterceptsMouseClicks (false, false);
-    lufsILabel.setText ("LUFS-I: -120.0", juce::dontSendNotification);
-    addAndMakeVisible (lufsILabel);
-
-    inPeakLabel.setJustificationType (juce::Justification::centredLeft);
-    inPeakLabel.setFont (juce::Font (13.0f));
-    inPeakLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
-    inPeakLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
-    inPeakLabel.setInterceptsMouseClicks (false, false);
-    inPeakLabel.setText ("IN PEAK: -120.0 dBFS", juce::dontSendNotification);
-    addAndMakeVisible (inPeakLabel);
-
-    outPeakLabel.setJustificationType (juce::Justification::centredLeft);
-    outPeakLabel.setFont (juce::Font (13.0f));
-    outPeakLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
-    outPeakLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
-    outPeakLabel.setInterceptsMouseClicks (false, false);
-    outPeakLabel.setText ("OUT PEAK: -120.0 dBFS", juce::dontSendNotification);
-    addAndMakeVisible (outPeakLabel);
-
-    ceilingLabel.setJustificationType (juce::Justification::centredLeft);
-    ceilingLabel.setFont (juce::Font (13.0f));
-    ceilingLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
-    ceilingLabel.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
-    ceilingLabel.setInterceptsMouseClicks (false, false);
-    ceilingLabel.setText ("CEILING: -1.0 dBTP", juce::dontSendNotification);
-    addAndMakeVisible (ceilingLabel);
-
-    // Trim knob setup
-    setRotary (trim);
-    trim.setLookAndFeel (knobLnf.get());
-    addAndMakeVisible (trim);
-
-    trimLabel.setText ("Trim", juce::dontSendNotification);
-    trimLabel.setJustificationType (juce::Justification::centred);
-    trimLabel.setFont (juce::Font (12.5f));
-    trimLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
-    addAndMakeVisible (trimLabel);
-    trimLabel.setInterceptsMouseClicks (false, false);
-
-    // Value readouts under top rotaries (display-only)
-    auto initValueLabel = [&] (juce::Label& l)
+    auto makeSurgical = [&](juce::Label &l)
     {
-        l.setJustificationType (juce::Justification::centred);
-        l.setFont (juce::Font (12.5f));
-        l.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.70f));
-        l.setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
-        l.setInterceptsMouseClicks (false, false);
-        addAndMakeVisible (l);
+        l.setFont(10.0f);
+        l.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.4f));
+        l.setJustificationType(juce::Justification::centredLeft);
+        addAndMakeVisible(l);
     };
+    makeSurgical(inTpLabel);
+    inTpLabel.setText("IN", juce::dontSendNotification); // Static Label
 
-    initValueLabel (trimValueLabel);
-    initValueLabel (glueValueLabel);
-    initValueLabel (ceilingValueLabel);
+    makeSurgical(outTpLabel);
+    outTpLabel.setText("OUT", juce::dontSendNotification); // Static Label
 
-    // Meters visibility
-    addAndMakeVisible (inTpMeter);
-    addAndMakeVisible (outTpMeter);
+    makeSurgical(lufsSLabel);
+    makeSurgical(lufsILabel);
 
-    auto& vts = processor.getAPVTS();
+    // --- Attachments ---
+    auto &vts = processor.getAPVTS();
+    driveA = std::make_unique<APVTS::SliderAttachment>(vts, "drive", drive);
+    ceilingA = std::make_unique<APVTS::SliderAttachment>(vts, "ceiling", ceiling);
+    trimA = std::make_unique<APVTS::SliderAttachment>(vts, "trim", trim);
+    linkA = std::make_unique<APVTS::ButtonAttachment>(vts, "stereo_link", stereoLink);
+    osA = std::make_unique<APVTS::ComboBoxAttachment>(vts, "oversampling_min", oversamplingMin);
 
-    driveA   = std::make_unique<APVTS::SliderAttachment> (vts, "drive", drive);
-    ceilingA = std::make_unique<APVTS::SliderAttachment> (vts, "ceiling", ceiling);
-    trimA    = std::make_unique<APVTS::SliderAttachment> (vts, "trim", trim);
-    // Bias is identity (Phase 2): no UI attachment, non-interactive display-only.
-    linkA    = std::make_unique<APVTS::ButtonAttachment> (vts, "stereo_link", stereoLink);
-    updateStereoLinkUi();
-    osA      = std::make_unique<APVTS::ComboBoxAttachment> (vts, "oversampling_min", oversamplingMin);
-
-    startTimerHz (30);
+    startTimerHz(30);
 }
 
 CompassMasteringLimiterAudioProcessorEditor::~CompassMasteringLimiterAudioProcessorEditor()
 {
-    drive.setLookAndFeel (nullptr);
-    ceiling.setLookAndFeel (nullptr);
-    trim.setLookAndFeel (nullptr);
+    drive.setLookAndFeel(nullptr);
+    ceiling.setLookAndFeel(nullptr);
+    trim.setLookAndFeel(nullptr);
+    stereoLink.setLookAndFeel(nullptr);
+    adaptiveBias.setLookAndFeel(nullptr);
+    oversamplingMin.setLookAndFeel(nullptr);
     knobLnf.reset();
 }
 
-
 void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
 {
-    //// [CML:UI] GR magnitude for UI — sign normalization
-    constexpr float kGrMinDb = 0.0f;
+    // [Optimization]: Static variables used here for single-file demonstration.
+    // In production, move these to the class header (PluginEditor.h) to support multiple plugin instances correctly.
+    static float lastGr = -1000.0f;
 
-    const float current = processor.getCurrentGRDb();
-    const float grMagDb = juce::jmax (kGrMinDb, current);
-    lastGrDb = grMagDb;
+    float gr = processor.getCurrentGRDb();
 
-    grMeter.pushValueDb (grMagDb);
-    currentGrLabel.setText (juce::String::formatted ("%.1f dB", grMagDb), juce::dontSendNotification);
-
-    // Top rotary value readouts (APVTS raw values)
-    auto& vts = processor.getAPVTS();
-    const float trimDb   = vts.getRawParameterValue ("trim")->load();
-    const float glueDb   = vts.getRawParameterValue ("drive")->load();
-    const float ceilDbTP = vts.getRawParameterValue ("ceiling")->load();
-
-    trimValueLabel.setText    (juce::String::formatted ("%.1f dB",   trimDb),   juce::dontSendNotification);
-    glueValueLabel.setText    (juce::String::formatted ("%.1f dB",   glueDb),   juce::dontSendNotification);
-    ceilingValueLabel.setText (juce::String::formatted ("%.1f dBTP", ceilDbTP), juce::dontSendNotification);
-
-        //// [CML:UI] Stereo TP Meter Feed — L/R Values
-    float inL = -120.0f, inR = -120.0f;
-    float outL = -120.0f, outR = -120.0f;
-
-    if (processor.getCurrentTruePeakDbTP_LR (inL, inR, outL, outR))
+    // Pro Pattern: Threshold check to prevent redundant repaints for GR
+    // Only update if value changes by more than 0.05 dB
+    if (std::abs(gr - lastGr) > 0.05f)
     {
-        inTpMeter.pushValueDbLR (inL, inR);
-        outTpMeter.pushValueDbLR (outL, outR);
-        inTpMeter.repaint();
-        outTpMeter.repaint();
-
-        inTpLabel.setText  (juce::String::formatted ("IN TP: %.1f / %.1f",  inL,  inR),  juce::dontSendNotification);
-        outTpLabel.setText (juce::String::formatted ("OUT TP: %.1f / %.1f", outL, outR), juce::dontSendNotification);
-    }
-    float lufsS = -120.0f;
-    float lufsI = -120.0f;
-    if (processor.getCurrentLufsDb (lufsS, lufsI))
-    {
-        lufsS = juce::jmax (-120.0f, lufsS);
-        lufsI = juce::jmax (-120.0f, lufsI);
-
-        lufsSLabel.setText (juce::String::formatted ("LUFS-S: %.1f", lufsS), juce::dontSendNotification);
-        lufsILabel.setText (juce::String::formatted ("LUFS-I: %.1f", lufsI), juce::dontSendNotification);
+        // [Fix]: Pass raw GR value. Forced negative polarity (-abs) caused issues with the specific meter type.
+        grMeter.pushValueDb(gr);
+        grMeter.repaint();
+        currentGrLabel.setText(juce::String::formatted("%.1f dB", std::abs(gr)), juce::dontSendNotification);
+        lastGr = gr;
     }
 
-    float inPk = -120.0f;
-    float outPk = -120.0f;
-    if (processor.getCurrentPeakDbFS (inPk, outPk))
-    {
-        inPk = juce::jmax (-120.0f, inPk);
-        outPk = juce::jmax (-120.0f, outPk);
-    }
+    auto &vts = processor.getAPVTS();
+    trimValueLabel.setText(juce::String::formatted("%.1f dB", vts.getRawParameterValue("trim")->load()), juce::dontSendNotification);
+    glueValueLabel.setText(juce::String::formatted("%.1f %%", vts.getRawParameterValue("drive")->load()), juce::dontSendNotification);
+    ceilingValueLabel.setText(juce::String::formatted("%.1f dB", vts.getRawParameterValue("ceiling")->load()), juce::dontSendNotification);
 
-    repaint (grFullBounds);
+    float inL, inR, outL, outR;
+    // [Fix]: Unconditional update to ensure meters don't freeze if return check fails.
+    processor.getCurrentTruePeakDbTP_LR(inL, inR, outL, outR);
+
+    // [Fix]: Unconditional update for Input/Output Meters
+    // Removed threshold check because it was preventing the internal peak-hold decay
+    // animation from running when the audio level was stable.
+    inTpMeter.pushValueDbLR(inL, inR);
+    inTpMeter.repaint();
+
+    outTpMeter.pushValueDbLR(outL, outR);
+    outTpMeter.repaint();
+
+    // Removed dynamic text updates for inTpLabel and outTpLabel
 }
 
-void CompassMasteringLimiterAudioProcessorEditor::paint (juce::Graphics& g)
+void CompassMasteringLimiterAudioProcessorEditor::paint(juce::Graphics &g)
 {
-    g.fillAll (juce::Colours::black);
+    g.fillAll(juce::Colour(0xFF0D0D0D)); // Base Matte Black
 
-    // Title
-    g.setColour (juce::Colours::white.withAlpha (0.85f));
-    g.setFont (14.0f);
-    g.drawText ("Compass Mastering Limiter", 16, 10, getWidth() - 32, 20, juce::Justification::left);
-
-    //// [CML:UI] GR module framing — well + tab (plate removed)
+    // --- Background Noise Texture (Refined: Cached Film Grain) ---
+    // Optimization: Draw cached noise instead of 3000 random rects per frame
+    if (auto *lnf = dynamic_cast<CompassKnobLookAndFeel *>(knobLnf.get()))
     {
-        // Compute geometry (derived from stored rectangles; no magic outside this block)
-        constexpr float kTabWidthFrac = 0.18f;
-        constexpr float kTabHeightPx  = 32.0f;
-        constexpr float kTabRiseFrac  = 0.72f;
-
-        constexpr float kWellCornerPx  = 8.0f;
-        constexpr float kWellTopA      = 0.62f;
-        constexpr float kWellBotA      = 0.92f;
-        constexpr float kWellStrokeHiA = 0.06f;
-        constexpr float kWellStrokeLoA = 0.55f;
-
-        auto well = grWellBounds.toFloat();
-
-        // Header tab centered above the well (reference-style)
-        const float tabW = well.getWidth() * kTabWidthFrac;
-        const float tabH = kTabHeightPx;
-        auto tab = juce::Rectangle<float> (
-            well.getCentreX() - 0.5f * tabW,
-            well.getY() - (tabH * kTabRiseFrac),
-            tabW,
-            tabH
-        );
-
-        // Inner well floor only (plate/cavity removed per Phase 3 Option B)
-        {
-            juce::ColourGradient wf (juce::Colours::black.withAlpha (kWellTopA),
-                                     well.getCentreX(), well.getY(),
-                                     juce::Colours::black.withAlpha (kWellBotA),
-                                     well.getCentreX(), well.getBottom(),
-                                     false);
-            g.setGradientFill (wf);
-            g.fillRoundedRectangle (well, kWellCornerPx);
-
-            g.setColour (juce::Colours::white.withAlpha (kWellStrokeHiA));
-            g.drawRoundedRectangle (well, kWellCornerPx, 1.0f);
-            g.setColour (juce::Colours::black.withAlpha (kWellStrokeLoA));
-            g.drawRoundedRectangle (well.reduced (1.0f, 1.0f), (kWellCornerPx - 1.0f), 1.0f);
-        }
-
-        //// [CML:UI] GR header tab — reference-style badge
-
-        {
-            constexpr float kTabCornerPx   = 8.0f;
-            constexpr float kTabStrokePx   = 1.0f;
-            constexpr float kTitleFontPx   = 22.0f;
-            constexpr float kValueFontPx   = 16.0f;
-            constexpr float kTitleAlpha    = 0.90f;
-            constexpr float kValueAlpha    = 0.85f;
-
-            constexpr float kTabTopA       = 0.07f;
-            constexpr float kTabBotA       = 0.62f;
-            constexpr float kTabStrokeA    = 0.07f;
-
-            const float grMagDb = juce::jmax (0.0f, lastGrDb);
-
-            juce::ColourGradient tabGrad (juce::Colours::white.withAlpha (kTabTopA),
-                                          tab.getCentreX(), tab.getY(),
-                                          juce::Colours::black.withAlpha (kTabBotA),
-                                          tab.getCentreX(), tab.getBottom(),
-                                          false);
-            g.setGradientFill (tabGrad);
-            g.fillRoundedRectangle (tab, kTabCornerPx);
-
-            g.setColour (juce::Colours::white.withAlpha (kTabStrokeA));
-            g.drawRoundedRectangle (tab, kTabCornerPx, kTabStrokePx);
-
-            auto tabTop  = tab.withHeight (tab.getHeight() * 0.5f);
-            auto tabBot  = tab.withTrimmedTop (tab.getHeight() * 0.5f);
-
-            g.setColour (juce::Colours::white.withAlpha (kTitleAlpha));
-            g.setFont (juce::Font (kTitleFontPx, juce::Font::bold));
-            g.drawText ("GR", tabTop.toNearestInt(), juce::Justification::centred, false);
-
-            g.setColour (juce::Colours::white.withAlpha (kValueAlpha));
-            g.setFont (juce::Font (kValueFontPx, juce::Font::bold));
-            g.drawText (juce::String::formatted ("%.1f dB", grMagDb),
-                        tabBot.toNearestInt(),
-                        juce::Justification::centred,
-                        false);
-        }
+        lnf->drawBackgroundNoise(g, getWidth(), getHeight());
     }
 
-    // Static labels (constitution: labeling for all visible controls)
-    auto drawLabelAbove = [&] (const juce::Component& c, const juce::String& label)
+    // --- Vignette (Refined: Tighter falloff) ---
     {
-        auto r = c.getBounds().translated (0, -18);
-        r.setHeight (16);
-        g.setColour (juce::Colours::white.withAlpha (0.70f));
-        g.setFont (12.5f);
-        g.drawText (label, r, juce::Justification::centred, false);
+        juce::ColourGradient vig(juce::Colours::transparentBlack, getWidth() / 2.0f, getHeight() / 2.0f,
+                                 juce::Colours::black.withAlpha(0.6f), 0.0f, 0.0f, true);
+        g.setGradientFill(vig);
+        g.fillAll();
+    }
+
+    // --- Panel Screws (Industrial Fasteners) ---
+    auto drawScrew = [&](int cx, int cy)
+    {
+        float r = 6.0f;
+        g.setGradientFill(juce::ColourGradient(juce::Colour(0xFF151515), cx - r, cy - r,
+                                               juce::Colour(0xFF2A2A2A), cx + r, cy + r, true));
+        g.fillEllipse(cx - r, cy - r, r * 2, r * 2);
+        g.setColour(juce::Colours::black.withAlpha(0.8f));
+        g.drawEllipse(cx - r, cy - r, r * 2, r * 2, 1.0f);
+        g.setColour(juce::Colour(0xFF050505));
+        juce::Path p;
+        p.addStar(juce::Point<float>((float)cx, (float)cy), 6, r * 0.3f, r * 0.6f);
+        g.fillPath(p);
     };
+    int m = 14;
+    drawScrew(m, m);
+    drawScrew(getWidth() - m, m);
+    drawScrew(m, getHeight() - m);
+    drawScrew(getWidth() - m, getHeight() - m);
 
-    drawLabelAbove (drive,           "Glue");
-    drawLabelAbove (ceiling,         "Ceiling");
+    // --- Stamped Branding ---
+    g.setFont(15.0f);
 
-    //// [CML:UI] Bias label/value — static readout
+    // Shadow (Refined: Softened print thickness)
+    g.setColour(juce::Colours::black.withAlpha(0.4f)); // Reduced alpha for realism
+    g.drawText("COMPASS", 35, 19, 100, 20, juce::Justification::left);
+    g.drawText("// LIMITER", 106, 19, 100, 20, juce::Justification::left);
+
+    // Main text
+    g.setColour(juce::Colours::white.withAlpha(0.9f));
+    g.drawText("COMPASS", 34, 18, 100, 20, juce::Justification::left);
+    g.setColour(juce::Colour(0xFFE6A532));
+    g.drawText("// LIMITER", 105, 18, 100, 20, juce::Justification::left);
+
+    // --- Side Meter Housings ---
+    auto drawMeterWell = [&](const juce::Rectangle<int> &bounds, bool isLeft)
     {
-        constexpr float kBiasLabelAlpha = 0.70f;
-        constexpr float kBiasValueAlpha = 0.88f;
-        constexpr float kBiasLabelFontPx = 12.5f;
-        constexpr float kBiasValueFontPx = 13.0f;
-        constexpr int   kBiasLabelH_Px = 16;
-        constexpr int   kBiasValueH_Px = 18;
-        constexpr int   kBiasValueTopPad_Px = 6;
+        auto well = bounds.toFloat().expanded(6.0f);
+        g.setColour(juce::Colour(0xFF131313));
+        g.fillRoundedRectangle(well, 6.0f);
+        g.setGradientFill(juce::ColourGradient(juce::Colours::black, well.getCentreX(), well.getY(),
+                                               juce::Colour(0xFF0A0A0A), well.getCentreX(), well.getBottom(), false));
+        g.fillRoundedRectangle(well.reduced(2.0f), 4.0f);
+        g.setColour(juce::Colours::white.withAlpha(0.05f));
+        g.drawRoundedRectangle(well, 6.0f, 1.0f);
 
-        auto r = adaptiveBias.getBounds();
-        auto labelR = r.translated (0, -18);
-        labelR.setHeight (kBiasLabelH_Px);
+        // Scale Markings
+        // [Pro Fix]: Etched look (Shorter, dimmer, drop shadow)
+        g.setColour(juce::Colours::white.withAlpha(0.1f));
+        float yStart = well.getY() + 4.0f;
+        float height = well.getHeight() - 8.0f;
+        float ticks[] = {0.0f, 0.25f, 0.5f, 0.75f};
+        for (float t : ticks)
+        {
+            float y = yStart + (t * height);
 
-        g.setColour (juce::Colours::white.withAlpha (kBiasLabelAlpha));
-        g.setFont (kBiasLabelFontPx);
-        g.drawText ("BIAS", labelR, juce::Justification::centred, false);
+            // Drop shadow for "etched" effect
+            g.setColour(juce::Colours::black.withAlpha(0.5f));
+            if (isLeft)
+                g.drawHorizontalLine(y + 1.0f, well.getX() - 3.0f, well.getX());
+            else
+                g.drawHorizontalLine(y + 1.0f, well.getRight(), well.getRight() + 3.0f);
 
-        auto valueR = r;
-        valueR.setHeight (kBiasValueH_Px);
-        valueR.setY (r.getY() + kBiasValueTopPad_Px);
+            // Highlight line
+            g.setColour(juce::Colours::white.withAlpha(0.1f));
+            if (isLeft)
+                g.drawHorizontalLine(y, well.getX() - 3.0f, well.getX());
+            else
+                g.drawHorizontalLine(y, well.getRight(), well.getRight() + 3.0f);
+        }
+    };
+    drawMeterWell(inTpMeter.getBounds(), true);
+    drawMeterWell(outTpMeter.getBounds(), false);
 
-        g.setColour (juce::Colours::white.withAlpha (kBiasValueAlpha));
-        g.setFont (juce::Font ((float) kBiasValueFontPx, juce::Font::bold));
-        g.drawText ("PROTECTIVE", valueR, juce::Justification::centred, false);
+    // --- The GR Module Well ---
+    if (!grWellBounds.isEmpty())
+    {
+        auto well = grWellBounds.toFloat();
+        g.setColour(juce::Colour(0xFF131313));
+        g.fillRoundedRectangle(well.expanded(4.0f), 6.0f);
+        g.setGradientFill(juce::ColourGradient(juce::Colours::black, well.getCentreX(), well.getY(),
+                                               juce::Colour(0xFF0A0A0A), well.getCentreX(), well.getBottom(), false));
+        g.fillRoundedRectangle(well, 4.0f);
+
+        // Grid Lines
+        float h = well.getHeight();
+        float y0 = well.getY();
+
+        // [Pro Fix]: Alternating rhythm for less visual noise
+        // 50% Line (Midpoint)
+        g.setColour(juce::Colours::white.withAlpha(0.03f)); // Slightly reduced from 0.04f
+        g.drawHorizontalLine(y0 + h * 0.50f, well.getX(), well.getRight());
+
+        // 25% and 75% Lines (Subtler)
+        g.setColour(juce::Colours::white.withAlpha(0.015f)); // Much dimmer
+        g.drawHorizontalLine(y0 + h * 0.25f, well.getX(), well.getRight());
+        g.drawHorizontalLine(y0 + h * 0.75f, well.getX(), well.getRight());
+
+        // [Pro Fix]: Inner Shadow at bottom for depth
+        juce::ColourGradient innerShadow(juce::Colours::transparentBlack, well.getCentreX(), well.getBottom() - 20.0f,
+                                         juce::Colours::black.withAlpha(0.8f), well.getCentreX(), well.getBottom(), false);
+        g.setGradientFill(innerShadow);
+        g.fillRoundedRectangle(well, 4.0f);
+
+        // Glass Sheen
+        g.setGradientFill(juce::ColourGradient(juce::Colours::white.withAlpha(0.03f), well.getTopLeft(),
+                                               juce::Colours::transparentBlack, well.getBottomRight(), false));
+        g.fillRoundedRectangle(well, 4.0f);
+
+        // [Pro Fix]: Top Edge Inner Highlight (Glass catch-light)
+        g.setColour(juce::Colours::white.withAlpha(0.15f));
+        g.drawHorizontalLine(well.getY() + 1.0f, well.getX() + 2.0f, well.getRight() - 2.0f);
+
+        // Frame
+        g.setColour(juce::Colours::white.withAlpha(0.1f));
+        g.drawRoundedRectangle(well, 4.0f, 1.0f);
     }
 
-    drawLabelAbove (stereoLink,      "Stereo Link");
-    drawLabelAbove (oversamplingMin, "Oversampling Min");
+    // --- Headers ---
+    auto drawHead = [&](juce::String text, juce::Slider &s)
+    {
+        auto b = s.getBounds().translated(0, -20);
+        bool active = s.isMouseOverOrDragging();
+        g.setColour(active ? juce::Colours::white.withAlpha(0.9f) : juce::Colours::white.withAlpha(0.4f));
+        g.setFont(11.0f);
+        g.drawText(text.toUpperCase(), b.withHeight(16), juce::Justification::centred);
+    };
+    drawHead("Glue", drive);
+    drawHead("Ceiling", ceiling);
+    drawHead("Trim", trim);
+
+    // --- Value Etchings ---
+    auto drawEtch = [&](juce::Component &c)
+    {
+        auto b = c.getBounds().toFloat().reduced(6.0f, 0.0f);
+        g.setColour(juce::Colours::black.withAlpha(0.7f));
+        g.fillRoundedRectangle(b, 3.0f);
+        g.setColour(juce::Colours::white.withAlpha(0.08f));
+        g.drawRoundedRectangle(b, 3.0f, 1.0f);
+    };
+    drawEtch(trimValueLabel);
+    drawEtch(glueValueLabel);
+    drawEtch(ceilingValueLabel);
+    drawEtch(currentGrLabel);
 }
 
 void CompassMasteringLimiterAudioProcessorEditor::resized()
 {
-    // Local geometry constants (single source of truth for this layout function)
-    const int knobSize        = 135;
-    const int knobGap         = 8;
-    const int knobRowExtraH   = 60;
-    const int valueLabelDY    = 4;
-    const int valueLabelH     = 20;
+    // --- Layout Constants (Fix direction: define grid and constants) ---
+    // Grid & Structure
+    const int sidePanelWidth = 80;
+    const int mainPadding = 10;
+    const int topDeckHeight = 170;
+    const int midDeckHeight = 120;
+    const int botDeckHeight = 100;
+    const int brandingHeight = 20;
 
-    const int behaviorW       = 220;
-    const int behaviorGap     = 40;
-    const int behaviorTrimTop = 8;
-    const int behaviorH       = 28;
+    // Components dimensions
+    const int meterWidth = 28;
+    const int meterHeight = 340;
+    const int bigKnobSize = 130;
+    const int smallKnobSize = 80;
+    const int uiControlHeight = 24; // Buttons, Combos
+    const int labelHeight = 20;
 
-    const int grTrimLR        = 80;
-    const int grLabelW        = 120;
-    const int grLabelH        = 30;
-    const int grLabelDY       = 10;
-    const int truthNumW       = 140;
-    const int truthGap        = 20;
+    // Spacing & Offsets
+    const int labelOverlapStandard = 5; // Tucks label up towards knob
+    const int labelOverlapTrim = 8;     // Tucks label tighter for Trim
+    const int bottomDeckYOffset = -10;  // Vertical shift for bottom row alignment
 
-    // 1) Start with full bounds
     auto r = getLocalBounds();
 
-    // 2) Outer frame (insets)
-    auto framed = r.withTrimmedLeft (Layout::insetL)
-                   .withTrimmedRight (Layout::insetR)
-                   .withTrimmedTop (Layout::insetT)
-                   .withTrimmedBottom (Layout::insetB);
+    // --- 1. Side Meter Columns ---
+    auto rLeft = r.removeFromLeft(sidePanelWidth);
+    auto rRight = r.removeFromRight(sidePanelWidth);
 
-    // 3) Carve out left/right TP meter columns
-    auto tpLeftZone = framed.removeFromLeft (Layout::leftTpWidth);
-    auto tpRightZone = framed.removeFromRight (Layout::rightTpWidth);
+    int meterY = (getHeight() - meterHeight) / 2;
 
-    // 4) Remainder is the center main zone
-    auto mainZone = framed;
+    inTpMeter.setBounds(rLeft.getX() + (sidePanelWidth - meterWidth) / 2, meterY, meterWidth, meterHeight);
+    outTpMeter.setBounds(rRight.getX() + (sidePanelWidth - meterWidth) / 2, meterY, meterWidth, meterHeight);
 
-    // 5) Carve vertical bands from main zone (in order)
-    auto bandKnobs = mainZone.removeFromTop (Layout::topKnobBand);
-    mainZone.removeFromTop (Layout::interBandGap);
+    // Labels relative to meters
+    const int meterLabelGap = 8;
+    inTpLabel.setBounds(rLeft.getX(), meterY + meterHeight + meterLabelGap, sidePanelWidth, labelHeight);
+    outTpLabel.setBounds(rRight.getX(), meterY + meterHeight + meterLabelGap, sidePanelWidth, labelHeight);
 
-    auto bandContext = mainZone.removeFromTop (Layout::contextRow);
-    mainZone.removeFromTop (Layout::interBandGap);
+    // --- Main Center ---
+    auto main = r.reduced(mainPadding);
 
-    auto bandGR = mainZone.removeFromTop (Layout::grMainZone);
-    grFullBounds = bandGR;  // store BEFORE modifying bandGR
-    mainZone.removeFromTop (Layout::interBandGap);
-    mainZone.removeFromTop (Layout::interBandGap);
+    // A. Top Deck (Knobs)
+    auto topDeck = main.removeFromTop(topDeckHeight);
+    topDeck.removeFromTop(brandingHeight); // Branding spacer
 
-    auto bandTruth = mainZone.removeFromTop (Layout::truthStrip);
+    auto driveArea = topDeck.removeFromLeft(topDeck.getWidth() / 2);
+    auto ceilArea = topDeck;
 
-    // Tall TP meters
-    inTpMeter.setBounds (tpLeftZone);
-    outTpMeter.setBounds (tpRightZone);
+    // Drive Knob
+    drive.setBounds(driveArea.withSizeKeepingCentre(bigKnobSize, bigKnobSize));
+    glueValueLabel.setBounds(drive.getX(), drive.getBottom() - labelOverlapStandard, drive.getWidth(), labelHeight);
 
-    // Top: three knob columns (identical) inside bandKnobs
-    const int colGap     = 0;
-    const int labelAreaH = 24;
-    const int knobAreaH  = knobSize;
-    const int valueAreaH = 30;
+    // Ceiling Knob
+    ceiling.setBounds(ceilArea.withSizeKeepingCentre(bigKnobSize, bigKnobSize));
+    ceilingValueLabel.setBounds(ceiling.getX(), ceiling.getBottom() - labelOverlapStandard, ceiling.getWidth(), labelHeight);
 
-    auto cols = bandKnobs;
+    // B. Middle Deck (GR Well)
+    auto midDeck = main.removeFromTop(midDeckHeight);
+    const int grTitleHeight = 30;
+    grTitleLabel.setBounds(midDeck.removeFromTop(grTitleHeight)); // "GAIN REDUCTION" title
 
-    const int colsTotalGap = colGap * 2;
-    const int colW = (cols.getWidth() - colsTotalGap) / 3;
+    // GR Meter Well & Label
+    grWellBounds = midDeck.reduced(mainPadding, 0).toNearestInt();
+    const int wellPadding = 4;
+    grMeter.setBounds(grWellBounds.reduced(wellPadding));
+    grMeter.setVisible(true); // [Fix]: Explicitly ensure visibility
 
-    auto col1 = cols.removeFromLeft (colW);
-    cols.removeFromLeft (colGap);
-    auto col2 = cols.removeFromLeft (colW);
-    cols.removeFromLeft (colGap);
-    auto col3 = cols.removeFromLeft (colW);
+    const int grLabelGap = 6;
+    currentGrLabel.setBounds(grWellBounds.getX(), grWellBounds.getBottom() + grLabelGap, grWellBounds.getWidth(), labelHeight);
 
-    auto makeAreas = [&] (juce::Rectangle<int> col)
-    {
-        auto labelArea = col.removeFromTop (labelAreaH);
-        auto knobArea  = col.removeFromTop (knobAreaH);
-        auto valueArea = col.removeFromTop (valueAreaH);
-        return (std::tuple<juce::Rectangle<int>, juce::Rectangle<int>, juce::Rectangle<int>> { labelArea, knobArea, valueArea });
-    };
+    // C. Bottom Deck (Utilities)
+    auto botDeck = main.removeFromBottom(botDeckHeight);
+    int colW = botDeck.getWidth() / 4;
 
-    {
-        auto [labelArea, knobArea, valueArea] = makeAreas (col1);
-        (void) labelArea;
-        trim.setBounds (knobArea.withSizeKeepingCentre (knobSize, knobSize).translated (56, 18));
-        trimValueLabel.setBounds (valueArea);
-    }
-    {
-        auto [labelArea, knobArea, valueArea] = makeAreas (col2);
-        (void) labelArea;
-        drive.setBounds (knobArea.withSizeKeepingCentre (knobSize, knobSize).translated (0, 18));
-        glueValueLabel.setBounds (valueArea);
-    }
-    {
-        auto [labelArea, knobArea, valueArea] = makeAreas (col3);
-        (void) labelArea;
-        ceiling.setBounds (knobArea.withSizeKeepingCentre (knobSize, knobSize).translated (-56, 18));
-        ceilingValueLabel.setBounds (valueArea);
-    }
+    // 1. Trim (Large, Bottom Left)
+    auto c1 = botDeck.removeFromLeft(colW);
+    trim.setBounds(c1.withSizeKeepingCentre(smallKnobSize, smallKnobSize).translated(0, bottomDeckYOffset));
+    trimValueLabel.setBounds(trim.getX(), trim.getBottom() - labelOverlapTrim, trim.getWidth(), labelHeight);
 
-    // Context band (reserved)
-    (void) bandContext;
+    // 2. Bias
+    adaptiveBias.setBounds(botDeck.removeFromLeft(colW).withSizeKeepingCentre(110, uiControlHeight).translated(0, bottomDeckYOffset));
 
-    // GR band: header + bar + breathing
-    auto grHeader  = bandGR.removeFromTop (48);
-    auto grBarArea = bandGR.removeFromTop (52);
+    // 3. Link
+    stereoLink.setBounds(botDeck.removeFromLeft(colW).withSizeKeepingCentre(90, uiControlHeight).translated(0, bottomDeckYOffset));
 
-    //// [CML:UI] Bias slot — static readout bounds
-    auto biasBounds = grHeader.removeFromLeft (behaviorW)
-                              .withTrimmedTop (behaviorTrimTop)
-                              .withHeight (behaviorH);
-    adaptiveBias.setBounds (biasBounds);
-    grHeader.removeFromLeft (behaviorGap);
-    //// [CML:UI] Stereo Link pill bounds — right-aligned switch
-    const int kStereoLinkPillW = 88;
-    auto linkBounds = grHeader.removeFromRight (kStereoLinkPillW)
-                              .withTrimmedTop (behaviorTrimTop)
-                              .withHeight (behaviorH)
-                              .reduced (0, 2);
-    stereoLink.setBounds (linkBounds);
-
-    const int wellPadX = 18;
-    const int wellH    = 74;
-    auto well = grFullBounds.withTrimmedTop (48)
-                           .withTrimmedBottom (6)
-                           .reduced (wellPadX, 0)
-                           .withHeight (wellH)
-                           .withY (grFullBounds.getY() + 58);
-    grWellBounds = well;
-
-    auto meterInner = well.reduced (18, 16);
-    grMeter.setBounds (meterInner);
-
-    auto titleArea = well.withTrimmedTop (6).removeFromTop (34);
-    grTitleLabel.setBounds (titleArea);
-
-    auto valueArea = well.withTrimmedBottom (8).removeFromBottom (28);
-    currentGrLabel.setBounds (valueArea);
-
-    // Clamp & Glue mini bars
-
-    // Truth strip: constrained to max width and centered
-    auto truthRow = bandTruth.withSizeKeepingCentre (juce::jmin (Layout::truthMaxWidth, bandTruth.getWidth()),
-                                                    bandTruth.getHeight());
-
-    inTpLabel.setBounds  (truthRow.removeFromLeft (truthNumW));
-    truthRow.removeFromLeft (truthGap);
-    outTpLabel.setBounds (truthRow.removeFromLeft (truthNumW));
-    truthRow.removeFromLeft (truthGap);
-    lufsSLabel.setBounds (truthRow.removeFromLeft (truthNumW));
-    lufsILabel.setBounds (truthRow.removeFromLeft (truthNumW));
+    // 4. OS
+    oversamplingMin.setBounds(botDeck.withSizeKeepingCentre(90, uiControlHeight).translated(0, bottomDeckYOffset));
 }
