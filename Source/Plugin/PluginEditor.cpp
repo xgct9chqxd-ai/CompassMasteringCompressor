@@ -305,9 +305,9 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
     adaptiveBias.setSelectedId(3, juce::dontSendNotification);
 
     setupCombo(oversamplingMin);
-    oversamplingMin.addItem("2x", 1);
-    oversamplingMin.addItem("4x", 2);
-    oversamplingMin.addItem("8x", 3);
+    oversamplingMin.addItem("Standard", 1);
+    oversamplingMin.addItem("High", 2);
+    oversamplingMin.addItem("Ultra", 3);
 
     // --- Meters ---
     addAndMakeVisible(grMeter);
@@ -383,6 +383,20 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
     static float lastInR = -1000.0f;
     static float lastOutL = -1000.0f;
     static float lastOutR = -1000.0f;
+
+    //// [CML:UI] Oversampling Combo Transport Lock
+    constexpr float kUiDisabledAlpha01 = 0.35f;
+
+    bool isPlaying = false;
+    if (auto *ph = processor.getPlayHead())
+    {
+        juce::AudioPlayHead::CurrentPositionInfo pos;
+        if (ph->getCurrentPosition(pos))
+            isPlaying = (pos.isPlaying || pos.isRecording);
+    }
+
+    oversamplingMin.setEnabled(!isPlaying);
+    oversamplingMin.setAlpha(isPlaying ? kUiDisabledAlpha01 : 1.0f);
 
     // --- 1. Gain Reduction Meter ---
     float gr = processor.getCurrentGRDb();
@@ -581,10 +595,10 @@ void CompassMasteringLimiterAudioProcessorEditor::paint(juce::Graphics &g)
     }
 
     // --- Dynamic Headers (Drawn on top of cached background to preserve hover effects) ---
-    auto drawHead = [&](juce::String text, juce::Slider &s)
+    auto drawHead = [&](juce::String text, juce::Component &c)
     {
-        auto b = s.getBounds().translated(0, -20);
-        bool active = s.isMouseOverOrDragging();
+        auto b = c.getBounds().translated(0, -20);
+        bool active = c.isMouseOverOrDragging();
         g.setColour(active ? juce::Colours::white.withAlpha(0.9f) : juce::Colours::white.withAlpha(0.4f));
         g.setFont(11.0f);
         g.drawText(text.toUpperCase(), b.withHeight(16), juce::Justification::centred);
@@ -592,6 +606,12 @@ void CompassMasteringLimiterAudioProcessorEditor::paint(juce::Graphics &g)
     drawHead("Glue", drive);
     drawHead("Ceiling", ceiling);
     drawHead("Trim", trim);
+
+    //// [CML:UI] Add title for the adaptive bias control
+    drawHead("Character", adaptiveBias);
+
+    //// [CML:UI] Add title for the oversampling control
+    drawHead("Quality", oversamplingMin);
 }
 
 void CompassMasteringLimiterAudioProcessorEditor::resized()

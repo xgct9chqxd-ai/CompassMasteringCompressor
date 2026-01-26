@@ -106,7 +106,7 @@ layout.add(std::make_unique<juce::AudioParameterFloat>(
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { "oversampling_min", 1 },
         "Oversampling Min",
-        juce::StringArray { "2x", "4x", "8x" },
+        juce::StringArray { "Standard", "High", "Ultra" },
         0
     ));
 
