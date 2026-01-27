@@ -41,28 +41,101 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        //// [CML:UI] GR meter LEDs only — paint-owned segments
-        auto r = getLocalBounds().toFloat();
+        //// [CML:UI] GR meter LEDs — header-separated “hardware” layout
+        const auto full = getLocalBounds().toFloat();
 
-        //// [CML:UI] GR meter optical segments — dense continuous scale (adaptive fit)
+        //// [CML:UI] GR Meter Screen Background
+        g.fillAll (juce::Colour (0xFF050505));
+
+        //// [CML:UI] GR Meter Inner Shadow
+        constexpr float kInnerShadowHPx   = 10.0f;
+        constexpr float kInnerStrokeA01   = 0.40f;
+        constexpr float kInnerGradEdgeA01 = 0.35f;
+
+        const float shH = juce::jmax (2.0f, juce::jmin (kInnerShadowHPx, 0.5f * full.getHeight()));
+
+        const auto topStrip = full.withHeight (shH);
+        const auto botStrip = juce::Rectangle<float> (full.getX(), full.getBottom() - shH, full.getWidth(), shH);
+
+        g.setColour (juce::Colours::black.withAlpha (kInnerStrokeA01));
+        g.drawLine (full.getX(), full.getY() + 0.5f, full.getRight(), full.getY() + 0.5f, 1.0f);
+        g.drawLine (full.getX(), full.getBottom() - 0.5f, full.getRight(), full.getBottom() - 0.5f, 1.0f);
+
+        {
+            juce::ColourGradient topG (juce::Colours::black.withAlpha (kInnerGradEdgeA01),
+                                       topStrip.getCentreX(), topStrip.getY(),
+                                       juce::Colours::transparentBlack,
+                                       topStrip.getCentreX(), topStrip.getBottom(),
+                                       false);
+            g.setGradientFill (topG);
+            g.fillRect (topStrip);
+        }
+
+        {
+            juce::ColourGradient botG (juce::Colours::black.withAlpha (kInnerGradEdgeA01),
+                                       botStrip.getCentreX(), botStrip.getBottom(),
+                                       juce::Colours::transparentBlack,
+                                       botStrip.getCentreX(), botStrip.getY(),
+                                       false);
+            g.setGradientFill (botG);
+            g.fillRect (botStrip);
+        }
+
+        auto bounds = full;
+
+        //// [CML:UI] GR meter header — reserved top strip (no text over LEDs)
+        constexpr float kHeaderHPx          = 20.0f;
+
+        constexpr float kHeaderFontPx       = 11.0f;
+        constexpr float kHeaderTitleAlpha01 = 0.40f;
+        constexpr float kHeaderValueAlpha01 = 0.65f;
+
+        constexpr int kHeaderTextXPx = 4;
+        constexpr int kHeaderTextYPx = 2;
+
+        auto headerArea = bounds.removeFromTop (kHeaderHPx);
+
+        const auto hb = headerArea.toNearestInt();
+        const int halfW = hb.getWidth() / 2;
+
+        const juce::Rectangle<int> left  (hb.getX() + kHeaderTextXPx,
+                                          hb.getY() + kHeaderTextYPx,
+                                          juce::jmax (0, halfW - kHeaderTextXPx),
+                                          juce::jmax (0, hb.getHeight() - kHeaderTextYPx));
+
+        const juce::Rectangle<int> right (hb.getX() + halfW,
+                                          hb.getY() + kHeaderTextYPx,
+                                          juce::jmax (0, hb.getWidth() - halfW - kHeaderTextXPx),
+                                          juce::jmax (0, hb.getHeight() - kHeaderTextYPx));
+
+        //// [CML:UI] GR Meter Header Readout
+        g.setFont (juce::Font (juce::FontOptions (kHeaderFontPx)));
+        g.setColour (juce::Colours::white.withAlpha (kHeaderTitleAlpha01));
+        g.drawText ("GAIN REDUCTION", left, juce::Justification::left);
+
+        const juce::String grText = juce::String (lastGrDb, 1) + " dB";
+        g.setFont (juce::Font (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(),
+                                                  kHeaderFontPx,
+                                                  juce::Font::plain)));
+        g.setColour (juce::Colour (0xFFE6A532).withAlpha (kHeaderValueAlpha01));
+        g.drawText (grText, right, juce::Justification::right);
+
+        //// [CML:UI] GR meter pill bars — wide retro LEDs
+        auto r = bounds;
+
         constexpr float kInsetXPx        = 18.0f;
         constexpr float kInsetYPx        = 18.0f;
         constexpr int   kBarsMax         = 120;
-        constexpr float kGapPx           = 1.0f;
-        constexpr float kMinBarWPx       = 1.0f;
+
+        constexpr float kGapPx           = 3.0f;
+        constexpr float kMinBarWPx       = 6.0f;
         constexpr float kRangeDb         = 24.0f;
 
-        // Professional palette compression (desaturated; no neon/primaries)
-        constexpr float kDesatMix01       = 0.42f; // 0=full hue, 1=grey
-        constexpr float kActiveAlphaTop   = 0.52f;
-        constexpr float kActiveAlphaBot   = 0.42f;
-        constexpr float kInactAlphaTop    = 0.14f;
-        constexpr float kInactAlphaBot    = 0.18f;
+        constexpr float kBarCornerRadiusPx = 2.0f;
+        constexpr float kInactiveAlpha01    = 0.05f;
 
-        const juce::Colour cAmber = juce::Colour::fromFloatRGBA (0.80f, 0.58f, 0.22f, 1.0f);
-        const juce::Colour cYell  = juce::Colour::fromFloatRGBA (0.78f, 0.76f, 0.36f, 1.0f);
-        const juce::Colour cGreen = juce::Colour::fromFloatRGBA (0.34f, 0.70f, 0.46f, 1.0f);
-        const juce::Colour cGrey  = juce::Colour::fromFloatRGBA (0.62f, 0.62f, 0.62f, 1.0f);
+        const juce::Colour cDarkOrange (0xFF602020);
+        const juce::Colour cBrightGold (0xFFFFD700);
 
         auto ledArea = r.reduced (kInsetXPx, kInsetYPx);
 
@@ -72,9 +145,6 @@ public:
         const int barsFit = (denom > 0.0f) ? (int) std::floor ((ledW + kGapPx) / denom) : kBarsMax;
         const int bars = juce::jlimit (1, kBarsMax, barsFit);
 
-        const float totalGapW = kGapPx * (float) (bars - 1);
-        const float rawBarW   = (ledW - totalGapW) / (float) bars;
-        const float barW      = juce::jmax (kMinBarWPx, rawBarW);
 
         const float grNorm = juce::jlimit (0.0f, 1.0f, lastGrDb / kRangeDb);
         const int lit = (int) std::floor (grNorm * (float) bars + 0.5f);
@@ -99,10 +169,11 @@ public:
         const int ledHPx = ledI.getHeight();
         const int ledWPx = juce::jmax (0, ledI.getWidth());
 
-        constexpr int kGapIPx = 1;
+        constexpr int kGapIPx     = 3;
+        constexpr int kMinBarWIPx = 6;
 
         const int usableWPx = juce::jmax (0, ledWPx - kGapIPx * (bars - 1));
-        const int barWBasePx = juce::jmax (1, usableWPx / bars);
+        const int barWBasePx = juce::jmax (kMinBarWIPx, usableWPx / bars);
         const int usedWPx    = barWBasePx * bars + kGapIPx * (bars - 1);
         const int remPx      = juce::jlimit (0, bars, ledWPx - usedWPx);
 
@@ -118,25 +189,15 @@ public:
 
             const float t = (bars > 1) ? ((float) i / (float) (bars - 1)) : 0.0f;
 
-            juce::Colour base = ramp.getColourAtPosition (juce::jlimit (0.0f, 1.0f, t));
+            const float a01 = isActive ? 1.0f : kInactiveAlpha01;
 
-            // Desaturate toward grey for disciplined “serious” read
-            base = base.interpolatedWith (cGrey, kDesatMix01);
-
-            // Very subtle vertical gradient per bar (top slightly brighter than bottom)
-            const float aTop = isActive ? kActiveAlphaTop : kInactAlphaTop;
-            const float aBot = isActive ? kActiveAlphaBot : kInactAlphaBot;
-
-            juce::Colour top = base.withAlpha (aTop);
-            juce::Colour bot = base.withAlpha (aBot);
-
-            juce::ColourGradient seg (top,
-                                      b.getCentreX(), b.getY(),
-                                      bot,
-                                      b.getCentreX(), b.getBottom(),
+            juce::ColourGradient seg (cDarkOrange.withAlpha (a01),
+                                      b.getX(), b.getCentreY(),
+                                      cBrightGold.withAlpha (a01),
+                                      b.getRight(), b.getCentreY(),
                                       false);
             g.setGradientFill (seg);
-            g.fillRect (b);
+            g.fillRoundedRectangle (b, kBarCornerRadiusPx);
         }
     }
 

@@ -12,8 +12,9 @@ static void setRotary(juce::Slider &s)
     s.setColour(juce::Slider::textBoxTextColourId, juce::Colours::transparentBlack);
     s.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     s.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
+    s.setColour(juce::Slider::textBoxHighlightColourId, juce::Colours::transparentBlack);
 
-    //// [CML:UI] Shift Fine Drag Modifier
+    //// [CML:UI] Rotary TextBox Fully Stealthed
     constexpr double kVelSensFine01 = 0.35;
     constexpr int kVelThreshPxMin = 1;
     constexpr double kVelOffsetMin01 = 0.0;
