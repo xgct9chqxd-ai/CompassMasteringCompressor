@@ -150,17 +150,26 @@ public:
         const int lit = (int) std::floor (grNorm * (float) bars + 0.5f);
 
         //// [CML:UI] GR meter ramp — continuous gradient sampling
-        constexpr float kRampMidPos01    = 0.50f;
-        constexpr float kRampHiPos01     = 0.75f;
-        constexpr float kRampHiBlendYG01 = 0.55f;
+constexpr float kRampMidPos01    = 0.50f;
+constexpr float kRampHiPos01     = 0.75f;
+constexpr float kRampHiBlendYG01 = 0.55f;
 
-        const juce::Colour cHi = cYell.interpolatedWith (cGreen, kRampHiBlendYG01);
+//// [CML:UI] GR meter ramp palette (local)
+constexpr juce::uint32 kRampAmberARGB = 0xFFE6A532u;
+constexpr juce::uint32 kRampYellARGB  = 0xFFE6D65Au;
+constexpr juce::uint32 kRampGreenARGB = 0xFF39D98Au;
 
-        juce::ColourGradient ramp (cAmber, 0.0f, 0.0f,
-                                   cGreen, 1.0f, 0.0f,
-                                   false);
-        ramp.addColour (kRampMidPos01, cYell);
-        ramp.addColour (kRampHiPos01, cHi);
+const juce::Colour cAmber { kRampAmberARGB };
+const juce::Colour cYell  { kRampYellARGB  };
+const juce::Colour cGreen { kRampGreenARGB };
+
+const juce::Colour cHi = cYell.interpolatedWith (cGreen, kRampHiBlendYG01);
+
+juce::ColourGradient ramp (cAmber, 0.0f, 0.0f,
+                           cGreen, 1.0f, 0.0f,
+                           false);
+ramp.addColour (kRampMidPos01, cYell);
+ramp.addColour (kRampHiPos01, cHi);
 
         //// [CML:UI] GR meter integer layout — stable gaps
         const auto ledI = ledArea.toNearestInt();
@@ -244,7 +253,7 @@ public:
         constexpr float kBgStrokePx      = 1.0f;
         constexpr float kCornerPx        = 6.0f;
 
-        constexpr float kInsetXPx        = 10.0f;
+        constexpr float kInsetXPx        = 2.0f;
         constexpr float kInsetYPx        = 10.0f;
 
         constexpr int   kSegN            = 44;
