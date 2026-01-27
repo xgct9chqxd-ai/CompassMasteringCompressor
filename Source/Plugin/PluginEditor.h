@@ -223,6 +223,23 @@ public:
         }
     }
 
+    void resetPeakHoldToCurrent() noexcept
+    {
+        //// [CML:UI] Stereo TP Meter Hold — Hard Reset
+        heldDb[0] = currentDb[0];
+        heldDb[1] = currentDb[1];
+    }
+
+    //// [CML:UI] Stereo TP Meter Decay Activity
+    bool hasActiveDecay() const noexcept
+    {
+        //// [CML:UI] Stereo TP Meter Hold — Active Decay Test
+        constexpr float kHoldActiveEpsDb = 0.05f;
+
+        return (heldDb[0] - currentDb[0]) > kHoldActiveEpsDb
+            || (heldDb[1] - currentDb[1]) > kHoldActiveEpsDb;
+    }
+
     void paint(juce::Graphics &g) override
     {
         //// [CML:UI] Stereo TP Meter LEDs — L/R Lanes

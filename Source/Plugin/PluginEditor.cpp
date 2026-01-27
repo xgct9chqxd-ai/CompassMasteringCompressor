@@ -205,17 +205,7 @@ public:
             g.fillPath(p);
         }
 
-        if (isTicked)
-        {
-            const float cx = (float)r.getX() + kTickInsetXPx;
-            const float cy = (float)r.getCentreY();
-
-            juce::Path t;
-            t.startNewSubPath(cx - kTickHalfWPx, cy);
-            t.lineTo(cx - kTickMidInsetPx, cy + kTickHalfHPx);
-            t.lineTo(cx + kTickHalfWPx, cy - kTickHalfHPx);
-            g.strokePath(t, juce::PathStrokeType(kTickStrokePx));
-        }
+        juce::ignoreUnused (isTicked);
     }
 
     void drawButtonBackground(juce::Graphics &g, juce::Button &button, const juce::Colour &, bool, bool) override
@@ -468,11 +458,12 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
     makeSurgical(outTpLabel);
     outTpLabel.setText("OUT", juce::dontSendNotification);
 
+    //// [CML:STATE] APVTS Attachment IDs
     auto &vts = processor.getAPVTS();
     driveA = std::make_unique<APVTS::SliderAttachment>(vts, "drive", drive);
     ceilingA = std::make_unique<APVTS::SliderAttachment>(vts, "ceiling", ceiling);
     trimA = std::make_unique<APVTS::SliderAttachment>(vts, "trim", trim);
-    biasA = std::make_unique<APVTS::ComboBoxAttachment>(vts, "bias", adaptiveBias);
+    biasA = std::make_unique<APVTS::ComboBoxAttachment>(vts, "adaptive_bias", adaptiveBias);
     linkA = std::make_unique<APVTS::ButtonAttachment>(vts, "stereo_link", stereoLink);
     osA = std::make_unique<APVTS::ComboBoxAttachment>(vts, "oversampling_min", oversamplingMin);
 
@@ -500,57 +491,142 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
 
     constexpr float kUiDisabledAlpha01 = 0.35f;
 
+    // --- Fix: Robust Playback Detection ---
     bool isPlaying = false;
     if (auto *ph = processor.getPlayHead())
     {
         juce::AudioPlayHead::CurrentPositionInfo pos;
         if (ph->getCurrentPosition(pos))
-            isPlaying = (pos.isPlaying || pos.isRecording);
+            isPlaying = pos.isPlaying; // Simplified to just playback state
     }
 
-    oversamplingMin.setEnabled(!isPlaying);
-    oversamplingMin.setAlpha(isPlaying ? kUiDisabledAlpha01 : 1.0f);
-
-    float gr = processor.getCurrentGRDb();
-    if (std::abs(gr - lastGr) > 0.05f)
+    // Only update enabled state if it changed to prevent flickering
+    if (oversamplingMin.isEnabled() == isPlaying)
     {
-        grMeter.pushValueDb(gr);
-        grMeter.repaint();
-        lastGr = gr;
+        oversamplingMin.setEnabled(!isPlaying);
+        oversamplingMin.setAlpha(isPlaying ? kUiDisabledAlpha01 : 1.0f);
     }
 
+    // --- Fix: Robust Bypass Detection ---
+    bool isBypassed = false;
+
+    // 1. Check standard bypass parameter
+    if (auto *bypassParam = processor.getBypassParameter())
+        isBypassed = (bypassParam->getValue() > 0.5f);
+
+    // 2. Fallback: Check APVTS for "bypass" or "master_bypass"
+    if (!isBypassed)
+    {
+        auto &vts = processor.getAPVTS();
+        if (auto *p = vts.getParameter("bypass"))
+            isBypassed = (p->getValue() > 0.5f);
+    }
+
+    //// [CML:UI] Bypass Edge Resync For GR Meter
+    static bool wasBypassed = false;
+    const bool bypassEdgeOff = (wasBypassed && !isBypassed);
+    wasBypassed = isBypassed;
+
+    if (isBypassed)
+    {
+        // Force reset meters
+        grMeter.pushValueDb(0.0f);
+        grMeter.repaint();
+
+        inTpMeter.pushValueDbLR(-120.0f, -120.0f);
+        outTpMeter.pushValueDbLR(-120.0f, -120.0f);
+        inTpMeter.resetPeakHoldToCurrent();
+        outTpMeter.resetPeakHoldToCurrent();
+        inTpMeter.repaint();
+        outTpMeter.repaint();
+
+        lastGr = -1000.0f;
+        lastInL = -1000.0f;
+        lastInR = -1000.0f;
+        lastOutL = -1000.0f;
+        lastOutR = -1000.0f;
+    }
+    else
+    {
+        //// [CML:UI] GR Meter Finite Guard And Update Gate
+        constexpr float kGrResetSentinelDb = -1000.0f;
+        constexpr float kGrDeltaEpsDb      = 0.05f;
+
+        if (bypassEdgeOff)
+            lastGr = kGrResetSentinelDb;
+
+        float gr = processor.getCurrentGRDb();
+        if (!std::isfinite(gr))
+        {
+            gr = 0.0f;
+            lastGr = kGrResetSentinelDb;
+        }
+
+        if (!std::isfinite(lastGr) || std::abs(gr - lastGr) > kGrDeltaEpsDb)
+        {
+            grMeter.pushValueDb(gr);
+            grMeter.repaint();
+            lastGr = gr;
+        }
+
+        //// [CML:UI] Meter Read Guard NoData
+        constexpr float kNoDataDbFS = -120.0f;
+
+        float inL = kNoDataDbFS, inR = kNoDataDbFS, outL = kNoDataDbFS, outR = kNoDataDbFS;
+        const bool haveTp = processor.getCurrentTruePeakDbTP_LR(inL, inR, outL, outR);
+
+        if (!haveTp)
+        {
+            inTpMeter.pushValueDbLR(kNoDataDbFS, kNoDataDbFS);
+            outTpMeter.pushValueDbLR(kNoDataDbFS, kNoDataDbFS);
+            inTpMeter.resetPeakHoldToCurrent();
+            outTpMeter.resetPeakHoldToCurrent();
+            inTpMeter.repaint();
+            outTpMeter.repaint();
+
+            lastInL = kNoDataDbFS;
+            lastInR = kNoDataDbFS;
+            lastOutL = kNoDataDbFS;
+            lastOutR = kNoDataDbFS;
+        }
+        else
+        {
+            //// [CML:UI] TP Meter Always Push Current Db
+            constexpr float kTpDeltaEpsDb = 0.05f;
+
+            const bool inputChanged  = (std::abs(inL - lastInL)  > kTpDeltaEpsDb) || (std::abs(inR - lastInR)  > kTpDeltaEpsDb);
+            const bool outputChanged = (std::abs(outL - lastOutL) > kTpDeltaEpsDb) || (std::abs(outR - lastOutR) > kTpDeltaEpsDb);
+
+            // Always push so currentDb tracks gradual movement (peak-hold can then decay smoothly).
+            inTpMeter.pushValueDbLR(inL, inR);
+            outTpMeter.pushValueDbLR(outL, outR);
+
+            // Peak-hold decay after currentDb is refreshed.
+            inTpMeter.updatePeakHoldDecay();
+            outTpMeter.updatePeakHoldDecay();
+
+            // Advance last values every tick (delta gate remains per-tick).
+            lastInL  = inL;
+            lastInR  = inR;
+            lastOutL = outL;
+            lastOutR = outR;
+
+            const bool inNeedsRepaint  = inputChanged  || inTpMeter.hasActiveDecay();
+            const bool outNeedsRepaint = outputChanged || outTpMeter.hasActiveDecay();
+
+            if (inNeedsRepaint)
+                inTpMeter.repaint();
+
+            if (outNeedsRepaint)
+                outTpMeter.repaint();
+        }
+    }
+
+    // Always update text labels (parameters might still change during bypass)
     auto &vts = processor.getAPVTS();
     trimValueLabel.setText(juce::String::formatted("%.1f dB", vts.getRawParameterValue("trim")->load()), juce::dontSendNotification);
     glueValueLabel.setText(juce::String::formatted("%.1f %%", vts.getRawParameterValue("drive")->load()), juce::dontSendNotification);
     ceilingValueLabel.setText(juce::String::formatted("%.1f dB", vts.getRawParameterValue("ceiling")->load()), juce::dontSendNotification);
-
-    float inL, inR, outL, outR;
-    processor.getCurrentTruePeakDbTP_LR(inL, inR, outL, outR);
-
-    bool inputChanged = (std::abs(inL - lastInL) > 0.05f) || (std::abs(inR - lastInR) > 0.05f);
-    bool outputChanged = (std::abs(outL - lastOutL) > 0.05f) || (std::abs(outR - lastOutR) > 0.05f);
-
-    inTpMeter.updatePeakHoldDecay();
-    outTpMeter.updatePeakHoldDecay();
-
-    if (inputChanged)
-    {
-        inTpMeter.pushValueDbLR(inL, inR);
-        lastInL = inL;
-        lastInR = inR;
-    }
-    if (outputChanged)
-    {
-        outTpMeter.pushValueDbLR(outL, outR);
-        lastOutL = outL;
-        lastOutR = outR;
-    }
-
-    if (inputChanged || inL > -100.0f || inR > -100.0f)
-        inTpMeter.repaint();
-
-    if (outputChanged || outL > -100.0f || outR > -100.0f)
-        outTpMeter.repaint();
 }
 
 void CompassMasteringLimiterAudioProcessorEditor::paint(juce::Graphics &g)
