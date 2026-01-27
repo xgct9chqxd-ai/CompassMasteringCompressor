@@ -44,7 +44,8 @@ public:
     APVTS& getAPVTS() noexcept { return *apvts; }
     const APVTS& getAPVTS() const noexcept { return *apvts; }
 
-    float getCurrentGRDb() const noexcept { return grDbForUI.load(std::memory_order_relaxed); }
+    //// [CML:METER] GR Read And Clear
+    float getCurrentGRDb() noexcept { return grDbForUI.exchange(0.0f, std::memory_order_relaxed); }
 
     bool getCurrentTruePeakDbTP (float& inDbTP, float& outDbTP) const noexcept
     {
