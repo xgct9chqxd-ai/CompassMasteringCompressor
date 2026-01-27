@@ -12,8 +12,9 @@ static void setRotary(juce::Slider &s)
     s.setColour(juce::Slider::textBoxTextColourId, juce::Colours::transparentBlack);
     s.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     s.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
+    s.setColour(juce::Slider::textBoxHighlightColourId, juce::Colours::transparentBlack);
 
-    //// [CML:UI] Shift Fine Drag Modifier
+    //// [CML:UI] Rotary TextBox Fully Stealthed
     constexpr double kVelSensFine01 = 0.35;
     constexpr int kVelThreshPxMin = 1;
     constexpr double kVelOffsetMin01 = 0.0;
@@ -37,37 +38,184 @@ public:
     }
 
     // --- Custom Controls ---
-    void drawComboBox(juce::Graphics &g, int width, int height, bool, int, int, int, int, juce::ComboBox &box) override
+    //// [CML:UI] ComboBox Dark Theme + Gold Arrow
+    void drawComboBox(juce::Graphics &g,
+                      int width,
+                      int height,
+                      bool,
+                      int, int, int, int,
+                      juce::ComboBox &) override
     {
-        auto r = juce::Rectangle<float>((float)width, (float)height);
+        constexpr float kCornerRadiusPx = 4.0f;
+        constexpr float kBorderAlpha01 = 0.20f;
+        constexpr float kArrowInsetRightPx = 16.0f;
+        constexpr float kArrowHalfWPx = 4.0f;
+        constexpr float kArrowHalfHPx = 3.0f;
 
-        // 1. Recessed Background
-        g.setColour(juce::Colour(0xFF0A0A0A));
-        g.fillRoundedRectangle(r, 4.0f);
+        const auto r = juce::Rectangle<float>((float)width, (float)height);
 
-        // 2. Inner Shadow
-        g.setColour(juce::Colours::black.withAlpha(0.8f));
-        g.drawRoundedRectangle(r.translated(0.5f, 0.5f), 4.0f, 1.0f);
+        g.setColour(juce::Colour(0xFF0D0D0D));
+        g.fillRoundedRectangle(r, kCornerRadiusPx);
 
-        // 3. Bottom Highlight
-        g.setColour(juce::Colours::white.withAlpha(0.08f));
-        g.drawRoundedRectangle(r.translated(-0.5f, -0.5f), 4.0f, 1.0f);
+        g.setColour(juce::Colours::white.withAlpha(kBorderAlpha01));
+        g.drawRoundedRectangle(r, kCornerRadiusPx, 1.0f);
 
-        //// [CML:UI] Combo Focus Ring Disabled
+        const float cx = r.getRight() - kArrowInsetRightPx;
+        const float cy = r.getCentreY();
 
-        // Chevron
         juce::Path p;
-        auto center = r.removeFromRight(20.0f).getCentre();
-        p.addTriangle(center.x - 3, center.y - 2, center.x + 3, center.y - 2, center.x, center.y + 3);
-        g.setColour(juce::Colours::white.withAlpha(0.4f));
+        p.addTriangle(cx - kArrowHalfWPx, cy - kArrowHalfHPx,
+                      cx + kArrowHalfWPx, cy - kArrowHalfHPx,
+                      cx, cy + kArrowHalfHPx);
+
+        g.setColour(juce::Colour(0xFFE6A532));
         g.fillPath(p);
     }
 
+    //// [CML:UI] ComboBox Label Paint White
+    void drawLabel(juce::Graphics &g, juce::Label &label) override
+    {
+        auto *parent = label.getParentComponent();
+        if (dynamic_cast<juce::ComboBox *>(parent) != nullptr)
+        {
+            constexpr float kDisabledAlpha01 = 0.35f;
+            constexpr float kTextAlpha01 = 0.70f; // Matching knob numbers
+
+            const auto a01 = label.isEnabled() ? kTextAlpha01 : kDisabledAlpha01;
+
+            g.setColour(juce::Colours::white.withAlpha(a01));
+            g.setFont(label.getFont());
+
+            // [Fix]: Use full local bounds of the label to ensure text isn't clipped
+            auto r = label.getLocalBounds().toFloat();
+            g.drawFittedText(label.getText(), r.toNearestInt(), label.getJustificationType(), 1);
+            return;
+        }
+
+        juce::LookAndFeel_V4::drawLabel(g, label);
+    }
+
+    //// [CML:UI] ComboBox Text Center Bold White
+    void positionComboBoxText(juce::ComboBox &box, juce::Label &label) override
+    {
+        // [Fix]: Explicitly calculate label bounds based on the ComboBox size
+        // instead of relying on the label's previous bounds.
+
+        auto r = box.getLocalBounds().toFloat().reduced(2.0f);
+        r.removeFromRight(20.0f); // Reserve space for the arrow area
+
+        label.setBounds(r.toNearestInt());
+
+        box.setColour(juce::ComboBox::textColourId, juce::Colours::white.withAlpha(0.7f));
+
+        label.setJustificationType(juce::Justification::centred);
+        label.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
+        label.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::bold)));
+    }
+
+    //// [CML:UI] Popup Menu Dark Theme Background
     void drawPopupMenuBackground(juce::Graphics &g, int width, int height) override
     {
-        g.fillAll(juce::Colour(0xFF0F0F0F));
-        g.setColour(juce::Colours::white.withAlpha(0.1f));
+        constexpr float kBorderAlpha01 = 0.20f;
+
+        g.fillAll(juce::Colour(0xFF050505));
+        g.setColour(juce::Colours::white.withAlpha(kBorderAlpha01));
         g.drawRect(0, 0, width, height);
+    }
+
+    //// [CML:UI] Popup Menu Item Text White
+    void drawPopupMenuItem(juce::Graphics &g,
+                           const juce::Rectangle<int> &area,
+                           bool isSeparator,
+                           bool isActive,
+                           bool isHighlighted,
+                           bool isTicked,
+                           bool hasSubMenu,
+                           const juce::String &text,
+                           const juce::String &shortcutKeyText,
+                           const juce::Drawable *,
+                           const juce::Colour *textColourToUse) override
+    {
+        constexpr int kTextPadLeftPx = 10;
+        constexpr int kTextPadRightPx = 26;
+        constexpr int kShortcutReserveWPx = 90;
+        constexpr float kHighlightAlpha01 = 0.12f;
+        constexpr float kSeparatorAlpha01 = 0.18f;
+        constexpr float kInactiveAlpha01 = 0.35f;
+        constexpr float kSeparatorStrokePx = 1.0f;
+
+        constexpr float kSubmenuInsetRightPx = 12.0f;
+        constexpr float kSubmenuArrowHalfHPx = 4.0f;
+        constexpr float kSubmenuArrowHalfWPx = 3.0f;
+
+        constexpr float kTickInsetXPx = 8.0f;
+        constexpr float kTickHalfHPx = 3.0f;
+        constexpr float kTickHalfWPx = 4.0f;
+        constexpr float kTickMidInsetPx = 1.0f;
+        constexpr float kTickStrokePx = 1.5f;
+
+        if (isSeparator)
+        {
+            const int y = area.getCentreY();
+            g.setColour(juce::Colours::white.withAlpha(kSeparatorAlpha01));
+            g.drawLine((float)area.getX(), (float)y, (float)area.getRight(), (float)y, kSeparatorStrokePx);
+            return;
+        }
+
+        auto r = area;
+
+        if (isHighlighted)
+        {
+            g.setColour(juce::Colour(0xFFE6A532).withAlpha(kHighlightAlpha01));
+            g.fillRect(r);
+        }
+
+        g.setFont(getPopupMenuFont());
+
+        juce::Colour textCol = juce::Colours::white.withAlpha(0.7f);
+        if (textColourToUse != nullptr)
+            textCol = *textColourToUse;
+
+        if (!isActive)
+            textCol = textCol.withAlpha(kInactiveAlpha01);
+
+        g.setColour(textCol);
+
+        auto textArea = r.reduced(kTextPadLeftPx, 0);
+        textArea.removeFromRight(kTextPadRightPx);
+
+        g.drawFittedText(text, textArea, juce::Justification::centredLeft, 1);
+
+        if (shortcutKeyText.isNotEmpty())
+        {
+            auto keyArea = r.reduced(kTextPadLeftPx, 0);
+            keyArea.removeFromLeft(juce::jmax(0, keyArea.getWidth() - kShortcutReserveWPx));
+            g.drawFittedText(shortcutKeyText, keyArea, juce::Justification::centredRight, 1);
+        }
+
+        if (hasSubMenu)
+        {
+            const float cx = (float)r.getRight() - kSubmenuInsetRightPx;
+            const float cy = (float)r.getCentreY();
+
+            juce::Path p;
+            p.addTriangle(cx - kSubmenuArrowHalfWPx, cy - kSubmenuArrowHalfHPx,
+                          cx - kSubmenuArrowHalfWPx, cy + kSubmenuArrowHalfHPx,
+                          cx + kSubmenuArrowHalfWPx, cy);
+            g.fillPath(p);
+        }
+
+        if (isTicked)
+        {
+            const float cx = (float)r.getX() + kTickInsetXPx;
+            const float cy = (float)r.getCentreY();
+
+            juce::Path t;
+            t.startNewSubPath(cx - kTickHalfWPx, cy);
+            t.lineTo(cx - kTickMidInsetPx, cy + kTickHalfHPx);
+            t.lineTo(cx + kTickHalfWPx, cy - kTickHalfHPx);
+            g.strokePath(t, juce::PathStrokeType(kTickStrokePx));
+        }
     }
 
     void drawButtonBackground(juce::Graphics &g, juce::Button &button, const juce::Colour &, bool, bool) override
@@ -90,14 +238,18 @@ public:
         g.setColour(juce::Colours::white.withAlpha(0.08f));
         g.drawRoundedRectangle(r.translated(-0.5f, -0.5f), 4.0f, 1.0f);
 
-        // 4. Active State (Inner glow instead of flat fill)
+        //// [CML:UI] Link Button Active Amber
+        constexpr float kLinkOnFillAlpha01 = 0.20f;
+        constexpr float kLinkOnBorderAlpha01 = 1.00f;
+
+        // 4. Active State (Amber theme)
         if (on || down)
         {
-            g.setColour(juce::Colour(0xFFE6A532).withAlpha(0.15f));
+            g.setColour(juce::Colour(0xFFE6A532).withAlpha(kLinkOnFillAlpha01));
             g.fillRoundedRectangle(r.reduced(2.0f), 3.0f);
 
-            // Subtle active border
-            g.setColour(juce::Colour(0xFFE6A532).withAlpha(0.3f));
+            // Brighter solid Gold border
+            g.setColour(juce::Colour(0xFFE6A532).withAlpha(kLinkOnBorderAlpha01));
             g.drawRoundedRectangle(r, 4.0f, 1.0f);
         }
     }
@@ -296,12 +448,7 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
         addAndMakeVisible(l);
     };
 
-    makeLabel(grTitleLabel, 22.0f, true);
-    grTitleLabel.setText("GAIN REDUCTION", juce::dontSendNotification);
-    grTitleLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.2f));
-
-    //// [CML:UI] Logic Update: GR Label matches primary knob readouts for uniformity
-    makeLabel(currentGrLabel, 16.0f, true);
+    //// [CML:UI] Central GR External Labels Disabled
 
     makeLabel(trimValueLabel, 14.0f, true);
     makeLabel(glueValueLabel, 14.0f, true);
@@ -369,7 +516,6 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
     {
         grMeter.pushValueDb(gr);
         grMeter.repaint();
-        currentGrLabel.setText(juce::String::formatted("%.1f dB", std::abs(gr)), juce::dontSendNotification);
         lastGr = gr;
     }
 
@@ -451,36 +597,22 @@ void CompassMasteringLimiterAudioProcessorEditor::paint(juce::Graphics &g)
             gBuffer.setColour(juce::Colour(0xFFE6A532));
             gBuffer.drawText("// LIMITER", 105, 18, 100, 20, juce::Justification::left);
 
+            //// [CML:UI] Side Meter Wells Recessed
             auto drawMeterWell = [&](const juce::Rectangle<int> &bounds, bool isLeft)
             {
-                auto well = bounds.toFloat().expanded(6.0f);
-                gBuffer.setColour(juce::Colour(0xFF131313));
-                gBuffer.fillRoundedRectangle(well, 6.0f);
-                gBuffer.setGradientFill(juce::ColourGradient(juce::Colours::black, well.getCentreX(), well.getY(),
-                                                       juce::Colour(0xFF0A0A0A), well.getCentreX(), well.getBottom(), false));
-                gBuffer.fillRoundedRectangle(well.reduced(2.0f), 4.0f);
-                gBuffer.setColour(juce::Colours::white.withAlpha(0.05f));
-                gBuffer.drawRoundedRectangle(well, 6.0f, 1.0f);
+                (void) isLeft;
 
-                gBuffer.setColour(juce::Colours::white.withAlpha(0.1f));
-                float yStart = well.getY() + 4.0f;
-                float height = well.getHeight() - 8.0f;
-                float ticks[] = {0.0f, 0.25f, 0.5f, 0.75f};
-                for (float t : ticks)
-                {
-                    float y = yStart + (t * height);
-                    gBuffer.setColour(juce::Colours::black.withAlpha(0.5f));
-                    if (isLeft)
-                        gBuffer.drawHorizontalLine(y + 1.0f, well.getX() - 3.0f, well.getX());
-                    else
-                        gBuffer.drawHorizontalLine(y + 1.0f, well.getRight(), well.getRight() + 3.0f);
+                constexpr float kWellExpandPx        = 6.0f;
+                constexpr float kWellCornerRadiusPx  = 4.0f;
+                constexpr float kGlassAlpha          = 0.05f;
 
-                    gBuffer.setColour(juce::Colours::white.withAlpha(0.1f));
-                    if (isLeft)
-                        gBuffer.drawHorizontalLine(y, well.getX() - 3.0f, well.getX());
-                    else
-                        gBuffer.drawHorizontalLine(y, well.getRight(), well.getRight() + 3.0f);
-                }
+                const auto well = bounds.toFloat().expanded (kWellExpandPx);
+
+                gBuffer.setColour (juce::Colour (0xFF0A0A0A));
+                gBuffer.fillRoundedRectangle (well, kWellCornerRadiusPx);
+
+                gBuffer.setColour (juce::Colours::white.withAlpha (kGlassAlpha));
+                gBuffer.fillRoundedRectangle (well.reduced (1.0f), kWellCornerRadiusPx);
             };
             drawMeterWell(inTpMeter.getBounds(), true);
             drawMeterWell(outTpMeter.getBounds(), false);
@@ -530,8 +662,7 @@ void CompassMasteringLimiterAudioProcessorEditor::paint(juce::Graphics &g)
             };
             drawEtch(trimValueLabel);
             drawEtch(glueValueLabel);
-            drawEtch(ceilingValueLabel);
-            drawEtch(currentGrLabel); });
+            drawEtch(ceilingValueLabel); });
     }
 
     auto drawHead = [&](juce::String text, juce::Component &c)
@@ -598,14 +729,13 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
     ceiling.setBounds(ceilArea.withSizeKeepingCentre(bigKnobSize, bigKnobSize));
     ceilingValueLabel.setBounds(ceiling.getX(), ceiling.getBottom() - labelOverlapStandard, ceiling.getWidth(), labelHeight);
 
+    //// [CML:UI] Central GR External Labels Disabled
     auto midDeck = main.removeFromTop(midDeckHeight);
-    grTitleLabel.setBounds(midDeck.removeFromTop(30));
+    midDeck.removeFromTop(30);
 
     grWellBounds = midDeck.reduced(mainPadding, 0).toNearestInt();
     grMeter.setBounds(grWellBounds.reduced(4));
     grMeter.setVisible(true);
-
-    currentGrLabel.setBounds(grWellBounds.getX(), grWellBounds.getBottom() + 6, grWellBounds.getWidth(), labelHeight);
 
     auto botDeck = main.removeFromBottom(botDeckHeight);
     int colW = botDeck.getWidth() / 4;
