@@ -509,9 +509,6 @@ private:
     juce::Label lufsSLabel;
     juce::Label lufsILabel;
 
-    juce::Label trimValueLabel;
-    juce::Label glueValueLabel;
-    juce::Label ceilingValueLabel;
 
     juce::Label inPeakLabel;
     juce::Label outPeakLabel;

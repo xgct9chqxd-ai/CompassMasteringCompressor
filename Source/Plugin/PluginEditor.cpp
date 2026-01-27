@@ -8,23 +8,20 @@
 static void setRotary(juce::Slider &s)
 {
     s.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
-    s.setColour(juce::Slider::textBoxTextColourId, juce::Colours::transparentBlack);
+
+    //// [CML:UI] Rotary TextBox Visible Styling
+    s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 24);
+
+    s.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white.withAlpha(0.7f));
     s.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     s.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
-    s.setColour(juce::Slider::textBoxHighlightColourId, juce::Colours::transparentBlack);
+    s.setColour(juce::Slider::textBoxHighlightColourId, juce::Colour(0xFFE6A532).withAlpha(0.4f));
 
-    //// [CML:UI] Rotary TextBox Fully Stealthed
     constexpr double kVelSensFine01 = 0.35;
     constexpr int kVelThreshPxMin = 1;
     constexpr double kVelOffsetMin01 = 0.0;
-
     s.setVelocityBasedMode(false);
-    s.setVelocityModeParameters(kVelSensFine01,
-                                kVelThreshPxMin,
-                                kVelOffsetMin01,
-                                true,
-                                juce::ModifierKeys::shiftModifier);
+    s.setVelocityModeParameters(kVelSensFine01, kVelThreshPxMin, kVelOffsetMin01, true, juce::ModifierKeys::shiftModifier);
 }
 
 //==============================================================================
@@ -72,26 +69,43 @@ public:
         g.fillPath(p);
     }
 
-    //// [CML:UI] ComboBox Label Paint White
+    //// [CML:UI] Slider TextBox Etched Label
     void drawLabel(juce::Graphics &g, juce::Label &label) override
     {
         auto *parent = label.getParentComponent();
-        if (dynamic_cast<juce::ComboBox *>(parent) != nullptr)
+
+        // CHECK: Is this label part of a Slider?
+        if (dynamic_cast<juce::Slider *>(parent) != nullptr)
         {
-            constexpr float kDisabledAlpha01 = 0.35f;
-            constexpr float kTextAlpha01 = 0.70f; // Matching knob numbers
+            //// [CML:UI] Slider TextBox Etch Background
+            constexpr float kEtchInsetXPx        = 6.0f;
+            constexpr float kEtchInsetYPx        = 0.0f;
+            constexpr float kEtchFillAlpha01     = 0.70f;
+            constexpr float kEtchStrokeAlpha01   = 0.08f;
+            constexpr float kEtchCornerRadiusPx  = 3.0f;
+            constexpr float kEtchStrokePx        = 1.0f;
 
-            const auto a01 = label.isEnabled() ? kTextAlpha01 : kDisabledAlpha01;
+            auto b = label.getLocalBounds().toFloat().reduced(kEtchInsetXPx, kEtchInsetYPx);
+            g.setColour(juce::Colours::black.withAlpha(kEtchFillAlpha01));
+            g.fillRoundedRectangle(b, kEtchCornerRadiusPx);
+            g.setColour(juce::Colours::white.withAlpha(kEtchStrokeAlpha01));
+            g.drawRoundedRectangle(b, kEtchCornerRadiusPx, kEtchStrokePx);
 
-            g.setColour(juce::Colours::white.withAlpha(a01));
-            g.setFont(label.getFont());
+            // 2. Draw the Text (Only if we aren't currently typing in it)
+            if (!label.isBeingEdited())
+            {
+                //// [CML:UI] Slider TextBox Etch Text
+                constexpr float kTextAlpha01 = 0.70f;
+                constexpr float kTextFontPx  = 14.0f;
 
-            // [Fix]: Use full local bounds of the label to ensure text isn't clipped
-            auto r = label.getLocalBounds().toFloat();
-            g.drawFittedText(label.getText(), r.toNearestInt(), label.getJustificationType(), 1);
+                g.setColour(juce::Colours::white.withAlpha(kTextAlpha01));
+                g.setFont(juce::Font(kTextFontPx, juce::Font::bold));
+                g.drawFittedText(label.getText(), label.getLocalBounds(), juce::Justification::centred, 1);
+            }
             return;
         }
 
+        // Default behavior for other labels (like the combo boxes)
         juce::LookAndFeel_V4::drawLabel(g, label);
     }
 
@@ -205,7 +219,7 @@ public:
             g.fillPath(p);
         }
 
-        juce::ignoreUnused (isTicked);
+        juce::ignoreUnused(isTicked);
     }
 
     void drawButtonBackground(juce::Graphics &g, juce::Button &button, const juce::Colour &, bool, bool) override
@@ -389,16 +403,17 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
     setSize(900, 500);
     knobLnf = std::make_unique<CompassKnobLookAndFeel>();
 
-    auto setupKnob = [&](juce::Slider &s, const juce::String &name)
+    auto setupKnob = [&](juce::Slider &s, const juce::String &name, const juce::String &suffix)
     {
         s.setName(name);
         setRotary(s);
+        s.setNumDecimalPlacesToDisplay(1);
         s.setLookAndFeel(knobLnf.get());
         addAndMakeVisible(s);
     };
-    setupKnob(drive, "Drive");
-    setupKnob(ceiling, "Ceiling");
-    setupKnob(trim, "Trim");
+    setupKnob(drive, "Drive", " %");
+    setupKnob(ceiling, "Ceiling", " dB");
+    setupKnob(trim, "Trim", " dB");
 
     stereoLink.setButtonText("LINK");
     stereoLink.setClickingTogglesState(true);
@@ -440,9 +455,6 @@ CompassMasteringLimiterAudioProcessorEditor::CompassMasteringLimiterAudioProcess
 
     //// [CML:UI] Central GR External Labels Disabled
 
-    makeLabel(trimValueLabel, 14.0f, true);
-    makeLabel(glueValueLabel, 14.0f, true);
-    makeLabel(ceilingValueLabel, 14.0f, true);
 
     auto makeSurgical = [&](juce::Label &l)
     {
@@ -550,7 +562,7 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
     {
         //// [CML:UI] GR Meter Finite Guard And Update Gate
         constexpr float kGrResetSentinelDb = -1000.0f;
-        constexpr float kGrDeltaEpsDb      = 0.05f;
+        constexpr float kGrDeltaEpsDb = 0.05f;
 
         if (bypassEdgeOff)
             lastGr = kGrResetSentinelDb;
@@ -594,7 +606,7 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
             //// [CML:UI] TP Meter Always Push Current Db
             constexpr float kTpDeltaEpsDb = 0.05f;
 
-            const bool inputChanged  = (std::abs(inL - lastInL)  > kTpDeltaEpsDb) || (std::abs(inR - lastInR)  > kTpDeltaEpsDb);
+            const bool inputChanged = (std::abs(inL - lastInL) > kTpDeltaEpsDb) || (std::abs(inR - lastInR) > kTpDeltaEpsDb);
             const bool outputChanged = (std::abs(outL - lastOutL) > kTpDeltaEpsDb) || (std::abs(outR - lastOutR) > kTpDeltaEpsDb);
 
             // Always push so currentDb tracks gradual movement (peak-hold can then decay smoothly).
@@ -606,12 +618,12 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
             outTpMeter.updatePeakHoldDecay();
 
             // Advance last values every tick (delta gate remains per-tick).
-            lastInL  = inL;
-            lastInR  = inR;
+            lastInL = inL;
+            lastInR = inR;
             lastOutL = outL;
             lastOutR = outR;
 
-            const bool inNeedsRepaint  = inputChanged  || inTpMeter.hasActiveDecay();
+            const bool inNeedsRepaint = inputChanged || inTpMeter.hasActiveDecay();
             const bool outNeedsRepaint = outputChanged || outTpMeter.hasActiveDecay();
 
             if (inNeedsRepaint)
@@ -624,9 +636,6 @@ void CompassMasteringLimiterAudioProcessorEditor::timerCallback()
 
     // Always update text labels (parameters might still change during bypass)
     auto &vts = processor.getAPVTS();
-    trimValueLabel.setText(juce::String::formatted("%.1f dB", vts.getRawParameterValue("trim")->load()), juce::dontSendNotification);
-    glueValueLabel.setText(juce::String::formatted("%.1f %%", vts.getRawParameterValue("drive")->load()), juce::dontSendNotification);
-    ceilingValueLabel.setText(juce::String::formatted("%.1f dB", vts.getRawParameterValue("ceiling")->load()), juce::dontSendNotification);
 }
 
 void CompassMasteringLimiterAudioProcessorEditor::paint(juce::Graphics &g)
@@ -736,9 +745,7 @@ void CompassMasteringLimiterAudioProcessorEditor::paint(juce::Graphics &g)
                 gBuffer.setColour(juce::Colours::white.withAlpha(0.08f));
                 gBuffer.drawRoundedRectangle(b, 3.0f, 1.0f);
             };
-            drawEtch(trimValueLabel);
-            drawEtch(glueValueLabel);
-            drawEtch(ceilingValueLabel); });
+            });
     }
 
     auto drawHead = [&](juce::String text, juce::Component &c)
@@ -799,11 +806,12 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
     auto driveArea = topDeck.removeFromLeft(topDeck.getWidth() / 2);
     auto ceilArea = topDeck;
 
-    drive.setBounds(driveArea.withSizeKeepingCentre(bigKnobSize, bigKnobSize));
-    glueValueLabel.setBounds(drive.getX(), drive.getBottom() - labelOverlapStandard, drive.getWidth(), labelHeight);
+    //// [CML:UI] Rotary Slider TextBox Height Reserve
+    constexpr int kKnobTextBoxExtraHPx = 25;
 
-    ceiling.setBounds(ceilArea.withSizeKeepingCentre(bigKnobSize, bigKnobSize));
-    ceilingValueLabel.setBounds(ceiling.getX(), ceiling.getBottom() - labelOverlapStandard, ceiling.getWidth(), labelHeight);
+    drive.setBounds(driveArea.withSizeKeepingCentre(bigKnobSize, bigKnobSize + kKnobTextBoxExtraHPx));
+
+    ceiling.setBounds(ceilArea.withSizeKeepingCentre(bigKnobSize, bigKnobSize + kKnobTextBoxExtraHPx));
 
     //// [CML:UI] Central GR External Labels Disabled
     auto midDeck = main.removeFromTop(midDeckHeight);
@@ -817,8 +825,7 @@ void CompassMasteringLimiterAudioProcessorEditor::resized()
     int colW = botDeck.getWidth() / 4;
 
     auto c1 = botDeck.removeFromLeft(colW);
-    trim.setBounds(c1.withSizeKeepingCentre(smallKnobSize, smallKnobSize).translated(0, bottomDeckYOffset));
-    trimValueLabel.setBounds(trim.getX(), trim.getBottom() - labelOverlapTrim, trim.getWidth(), labelHeight);
+    trim.setBounds(c1.withSizeKeepingCentre(smallKnobSize, smallKnobSize + kKnobTextBoxExtraHPx).translated(0, bottomDeckYOffset));
 
     adaptiveBias.setBounds(botDeck.removeFromLeft(colW).withSizeKeepingCentre(110, uiControlHeight).translated(0, bottomDeckYOffset));
 

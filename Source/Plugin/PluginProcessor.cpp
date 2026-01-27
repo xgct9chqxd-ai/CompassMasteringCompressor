@@ -28,7 +28,7 @@ CompassMasteringLimiterAudioProcessor::createParameterLayout()
         0.0f,
         juce::String(),
         juce::AudioProcessorParameter::genericParameter,
-        [] (float v, int) { return juce::String (v, 1) + " dB"; },
+        [] (float v, int) { return juce::String (v, 1) + " %"; },
         [] (const juce::String& s) { return s.getFloatValue(); }
     ));
 
@@ -39,7 +39,7 @@ CompassMasteringLimiterAudioProcessor::createParameterLayout()
         -0.3f,
         juce::String(),
         juce::AudioProcessorParameter::genericParameter,
-        [] (float v, int) { return juce::String (v, 1) + " dBTP"; },
+        [] (float v, int) { return juce::String (v, 1) + " dB"; },
         [] (const juce::String& s) { return s.getFloatValue(); }
     ));
 
