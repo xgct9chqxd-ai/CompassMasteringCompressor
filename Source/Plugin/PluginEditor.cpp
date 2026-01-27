@@ -77,31 +77,7 @@ public:
         // CHECK: Is this label part of a Slider?
         if (dynamic_cast<juce::Slider *>(parent) != nullptr)
         {
-            //// [CML:UI] Slider TextBox Etch Background
-            constexpr float kEtchInsetXPx        = 6.0f;
-            constexpr float kEtchInsetYPx        = 0.0f;
-            constexpr float kEtchFillAlpha01     = 0.70f;
-            constexpr float kEtchStrokeAlpha01   = 0.08f;
-            constexpr float kEtchCornerRadiusPx  = 3.0f;
-            constexpr float kEtchStrokePx        = 1.0f;
-
-            auto b = label.getLocalBounds().toFloat().reduced(kEtchInsetXPx, kEtchInsetYPx);
-            g.setColour(juce::Colours::black.withAlpha(kEtchFillAlpha01));
-            g.fillRoundedRectangle(b, kEtchCornerRadiusPx);
-            g.setColour(juce::Colours::white.withAlpha(kEtchStrokeAlpha01));
-            g.drawRoundedRectangle(b, kEtchCornerRadiusPx, kEtchStrokePx);
-
-            // 2. Draw the Text (Only if we aren't currently typing in it)
-            if (!label.isBeingEdited())
-            {
-                //// [CML:UI] Slider TextBox Etch Text
-                constexpr float kTextAlpha01 = 0.70f;
-                constexpr float kTextFontPx  = 14.0f;
-
-                g.setColour(juce::Colours::white.withAlpha(kTextAlpha01));
-                g.setFont(juce::Font(kTextFontPx, juce::Font::bold));
-                g.drawFittedText(label.getText(), label.getLocalBounds(), juce::Justification::centred, 1);
-            }
+            juce::LookAndFeel_V4::drawLabel(g, label);
             return;
         }
 
